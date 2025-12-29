@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import product
 from typing import Dict, List
 
 import numpy as np
@@ -247,13 +248,12 @@ class BacktestEngine:
         )
 
         for hh_lb, exit_type, risk_frac, tp_pct in tqdm(
-            [
-                (hh_val, exit_type_val, risk_frac, tp_pct)
-                for hh_val in self.config.highest_high_lookback_range
-                for exit_type_val in self.config.exit_type_candidates
-                for risk_frac in self.config.risk_fraction_candidates
-                for tp_pct in self.config.take_profit_pct_candidates
-            ],
+            product(
+                self.config.highest_high_lookback_range,
+                self.config.exit_type_candidates,
+                self.config.risk_fraction_candidates,
+                self.config.take_profit_pct_candidates,
+            ),
             total=total,
             desc="Param search",
             ncols=80,
