@@ -39,7 +39,7 @@ Set `PYTHONPATH=src` from the repository root, then run one of the following:
 - `BacktestEngine` sweeps `highest_high_lookback` and exit-type candidates to find the best-performing parameters.
 - `MainEngine` coordinates optimization, persists `data/best_params.json`, and enqueues new runs in `data/optimization_queue.json`.
 - `LiveTradingEngine` streams Bybit klines, applies the short breakout logic, and manages exits/margin calls.
-- Backtests simulate the same microstructure as paper/live trading: spread + slippage on fills, random rejects, fee debits, leverage clamping, liquidation checks, structured exits, and a Bybit-like cap on available balance usage (risk is capped at the configured maximum fraction). Live paper fills use the current mid price by default.
+- Backtests simulate the same microstructure as paper/live trading: spread + slippage on fills, random rejects, fee debits, leverage clamping, liquidation checks, structured exits, a Bybit-like cap on available balance usage (risk is capped at the configured maximum fraction), and verbose logging of blocked trades (e.g., insufficient history, no edge, rejects, risk/min-notional limits). Live paper fills use the current mid price by default.
 - `paths.py` centralizes repository and `data/` paths so artifacts land in a single shared folder.
 
 ## Getting started
