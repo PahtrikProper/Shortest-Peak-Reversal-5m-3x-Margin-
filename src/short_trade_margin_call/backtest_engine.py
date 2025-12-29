@@ -246,7 +246,7 @@ class BacktestEngine:
             * len(list(self.config.take_profit_pct_candidates))
         )
 
-        for hh_lb, exit_type in tqdm(
+        for hh_lb, exit_type, risk_frac, tp_pct in tqdm(
             [
                 (hh_val, exit_type_val, risk_frac, tp_pct)
                 for hh_val in self.config.highest_high_lookback_range
