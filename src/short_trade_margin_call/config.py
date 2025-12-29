@@ -22,6 +22,7 @@ class TraderConfig:
     risk_fraction: float = 0.95  # portion of available USDT to deploy per entry
     max_risk_fraction: float = 0.9  # cap similar to Bybit not allowing full balance as initial margin
     maintenance_margin_rate: float = 0.004  # Bybit linear perp maintenance margin (approximation)
+    log_blocked_trades: bool = True  # verbose logging for rejected/skipped entries
 
     # Strategy inputs
     highest_high_lookback: int = 50

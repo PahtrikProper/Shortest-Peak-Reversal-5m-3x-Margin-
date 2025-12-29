@@ -29,26 +29,26 @@ class SellOrderEngine:
         row: pd.Series,
         available_usdt: float,
         use_raw_mid_price: bool = False,
-    ) -> Tuple[Optional[PositionState], str, float, float, float]:
+    ) -> Tuple[Optional[PositionState], str, float, float, float, str]:
         if use_raw_mid_price:
             entry_price, status = float(row["Close"]), "filled"
         else:
             entry_price, status = simulate_order_fill("short", row["Close"], self.config)
         if status == "rejected" or entry_price is None:
-            return None, status, 0.0, 0.0, 0.0
+            return None, status, 0.0, 0.0, 0.0, "order_rejected_or_no_fill"
 
         if available_usdt <= 0:
-            return None, "insufficient_funds", 0.0, 0.0, 0.0
+            return None, "insufficient_funds", 0.0, 0.0, 0.0, "no_balance_available"
 
         risk_fraction = min(max(self.config.risk_fraction, 0.0), self.config.max_risk_fraction)
         if risk_fraction == 0:
-            return None, "insufficient_funds", 0.0, 0.0, 0.0
+            return None, "insufficient_funds", 0.0, 0.0, 0.0, "risk_fraction_zero"
 
         margin_used = available_usdt * risk_fraction
         leverage_used = resolve_leverage(margin_used, self.config.desired_leverage, self.config)
         trade_value = margin_used * leverage_used
         if trade_value < self.config.min_notional:
-            return None, "min_notional_not_met", 0.0, 0.0, 0.0
+            return None, "min_notional_not_met", 0.0, 0.0, 0.0, "below_min_notional"
         qty = trade_value / entry_price
         entry_fee = bybit_fee_fn(trade_value, self.config)
 

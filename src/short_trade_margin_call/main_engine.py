@@ -33,6 +33,7 @@ class LiveTradingEngine:
         self.tradelog = []
         self.equity = config.starting_balance
         self._last_signal_ts: Optional[pd.Timestamp] = None
+        self._blocked_log: list[str] = []
 
     @staticmethod
     def _exit_target_for_row(row: pd.Series, exit_type: str) -> float:
@@ -137,7 +138,8 @@ class LiveTradingEngine:
                 data = self._prepare_live_dataframe()
                 min_required = self.params.highest_high_lookback + self.config.min_history_padding
                 if len(data) < min_required:
-                    print("Waiting for enough bars...")
+                    if self.config.log_blocked_trades:
+                        print("Waiting for enough bars (insufficient history for signals).")
                     time.sleep(2)
                     continue
 
@@ -145,21 +147,24 @@ class LiveTradingEngine:
                 nowstr = time.strftime("%Y-%m-%d %H:%M", time.gmtime())
 
                 if self.results.get("Total PnL", 0) <= 0:
-                    print(f"{nowstr} | NO EDGE detected by optimizer – standing aside.")
+                    if self.config.log_blocked_trades:
+                        print(f"{nowstr} | NO EDGE detected by optimizer – standing aside.")
                     time.sleep(60 * self.config.agg_minutes)
                     continue
 
                 if not self.position:
                     if self.sell_engine.should_enter(row, None) and row.name != self._last_signal_ts:
-                        position, status, entry_fee, _, margin_used = self.sell_engine.open_position(
+                        position, status, entry_fee, _, margin_used, block_reason = self.sell_engine.open_position(
                             row,
                             available_usdt=self.equity,
                             use_raw_mid_price=True,
                         )
                         if status in {"rejected", "min_notional_not_met"} or not position:
-                            print(f"{nowstr} | ENTRY (SHORT) rejected – simulated failure (no trade)")
+                            if self.config.log_blocked_trades:
+                                print(f"{nowstr} | ENTRY blocked ({block_reason}) – simulated failure (no trade)")
                         elif status == "insufficient_funds":
-                            print(f"{nowstr} | ENTRY (SHORT) skipped – insufficient USDT balance")
+                            if self.config.log_blocked_trades:
+                                print(f"{nowstr} | ENTRY blocked (insufficient_funds) – cannot allocate margin")
                         else:
                             position.exit_type = self.params.exit_type
                             position.exit_target = self._exit_target_for_row(row, self.params.exit_type)
@@ -175,7 +180,9 @@ class LiveTradingEngine:
                             self._print_entry(nowstr, position)
                             self._last_signal_ts = row.name
                     else:
-                        print(f"{nowstr} | NO TRADE – waiting for a new signal.")
+                        if self.config.log_blocked_trades:
+                            reason = "duplicate_signal" if row.name == self._last_signal_ts else "no_entry_signal"
+                            print(f"{nowstr} | ENTRY blocked ({reason}) – waiting for a new signal.")
 
                 self._handle_exit(row, nowstr)
 
