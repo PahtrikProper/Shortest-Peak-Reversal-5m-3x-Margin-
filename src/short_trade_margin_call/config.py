@@ -20,6 +20,7 @@ class TraderConfig:
     order_reject_prob: float = 0.01  # probability an order is rejected (simulated failure)
     max_fill_latency: float = 0.5  # seconds
     risk_fraction: float = 0.95  # portion of available USDT to deploy per entry
+    maintenance_margin_rate: float = 0.004  # Bybit linear perp maintenance margin (approximation)
 
     # Strategy inputs
     highest_high_lookback: int = 50

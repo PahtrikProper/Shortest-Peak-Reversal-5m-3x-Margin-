@@ -132,7 +132,7 @@ class BacktestEngine:
                 qty = trade_value / entry_price
                 entry_fee = bybit_fee_fn(trade_value, self.config)
                 balance -= entry_fee + margin_used
-                liq_price = calc_liq_price_short(entry_price, int(leverage_used))
+                liq_price = calc_liq_price_short(entry_price, int(leverage_used), self.config)
                 exit_target = self._exit_target_for_row(row, params.exit_type)
                 min_tp_price = entry_price * (1 - min_tp_pct)
                 if np.isnan(exit_target) and entry_price is not None:

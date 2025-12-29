@@ -154,6 +154,7 @@ class LiveTradingEngine:
                         position, status, entry_fee, _, margin_used = self.sell_engine.open_position(
                             row,
                             available_usdt=self.equity,
+                            use_raw_mid_price=True,
                         )
                         if status in {"rejected", "min_notional_not_met"} or not position:
                             print(f"{nowstr} | ENTRY (SHORT) rejected – simulated failure (no trade)")
@@ -168,7 +169,7 @@ class LiveTradingEngine:
                             min_tp_price = position.entry_price * (1 - min_tp_pct)  # type: ignore[operator]
                             if position.exit_target is None or position.exit_target > min_tp_price:
                                 position.exit_target = min_tp_price
-                            position.liq_price = calc_liq_price_short(position.entry_price, int(position.leverage))
+                            position.liq_price = calc_liq_price_short(position.entry_price, int(position.leverage), self.config)
                             self.equity -= (entry_fee + margin_used)
                             self.position = position
                             self._print_entry(nowstr, position)
