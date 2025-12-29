@@ -112,7 +112,7 @@ class BacktestEngine:
                     equity_curve.append(balance)
                     continue
 
-                risk_fraction = min(max(params.risk_fraction, 0.0), 1.0)
+                risk_fraction = min(max(params.risk_fraction, 0.0), self.config.max_risk_fraction)
                 if risk_fraction == 0:
                     equity_curve.append(balance)
                     continue

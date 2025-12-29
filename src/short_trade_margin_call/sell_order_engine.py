@@ -40,7 +40,7 @@ class SellOrderEngine:
         if available_usdt <= 0:
             return None, "insufficient_funds", 0.0, 0.0, 0.0
 
-        risk_fraction = min(max(self.config.risk_fraction, 0.0), 1.0)
+        risk_fraction = min(max(self.config.risk_fraction, 0.0), self.config.max_risk_fraction)
         if risk_fraction == 0:
             return None, "insufficient_funds", 0.0, 0.0, 0.0
 

@@ -20,6 +20,7 @@ class TraderConfig:
     order_reject_prob: float = 0.01  # probability an order is rejected (simulated failure)
     max_fill_latency: float = 0.5  # seconds
     risk_fraction: float = 0.95  # portion of available USDT to deploy per entry
+    max_risk_fraction: float = 0.9  # cap similar to Bybit not allowing full balance as initial margin
     maintenance_margin_rate: float = 0.004  # Bybit linear perp maintenance margin (approximation)
 
     # Strategy inputs
@@ -57,6 +58,6 @@ class TraderConfig:
             f"Requested leverage: {self.desired_leverage}x | Bybit cap: {self.bybit_max_leverage}x\n"
             f"Fees: {self.bybit_fee * 100:.2f}% per trade | Spread model: {self.spread_bps} bps | Slippage model: ~{self.slippage_bps} bps\n"
             f"Order reject probability: {self.order_reject_prob * 100:.2f}% | Max simulated latency: {self.max_fill_latency}s\n"
-            f"Risk per entry: {self.risk_fraction * 100:.1f}% of available USDT | Min TP: {self.min_take_profit_pct * 100:.2f}%\n"
+            f"Risk per entry: min({self.risk_fraction * 100:.1f}%, {self.max_risk_fraction * 100:.1f}%) of available USDT | Min TP: {self.min_take_profit_pct * 100:.2f}%\n"
             f"Strategy: Short new highs, exit via tested structure targets (highest low / lowest high / midpoint) with Bybit-style liquidation and leverage gating."
         )
