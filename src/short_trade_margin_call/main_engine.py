@@ -164,6 +164,10 @@ class LiveTradingEngine:
                             position.exit_target = self._exit_target_for_row(row, self.params.exit_type)
                             if np.isnan(position.exit_target):
                                 position.exit_target = position.entry_price * (1 - self.config.take_profit_pct)  # type: ignore[operator]
+                            min_tp_pct = getattr(self.config, "min_take_profit_pct", 0.0033)
+                            min_tp_price = position.entry_price * (1 - min_tp_pct)  # type: ignore[operator]
+                            if position.exit_target is None or position.exit_target > min_tp_price:
+                                position.exit_target = min_tp_price
                             position.liq_price = calc_liq_price_short(position.entry_price, int(position.leverage))
                             self.equity -= (entry_fee + margin_used)
                             self.position = position
