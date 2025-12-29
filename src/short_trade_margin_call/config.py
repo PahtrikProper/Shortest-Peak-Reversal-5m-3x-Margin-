@@ -10,7 +10,8 @@ DEFAULT_AGG_MINUTES = 5
 class TraderConfig:
     symbol: str = "SOLUSDT"
     category: str = "linear"
-    backtest_days: int = 60
+    backtest_days: int = 7
+    contract_type: str = "LinearPerpetual"  # Bybit futures contract type
     starting_balance: float = 472
     bybit_fee: float = 0.001
     agg_minutes: int = DEFAULT_AGG_MINUTES
@@ -23,9 +24,12 @@ class TraderConfig:
     # Strategy inputs
     highest_high_lookback: int = 50
     take_profit_pct: float = 0.0044  # used as a fallback target when no structure target is available
-    exit_type_candidates: Sequence[str] = field(default_factory=lambda: ("highest_low", "lowest_high", "midpoint"))
+    # Only structural exits are searched by default; midpoint remains supported for backwards compatibility.
+    exit_type_candidates: Sequence[str] = field(default_factory=lambda: ("highest_low", "lowest_high"))
 
-    highest_high_lookback_range: Sequence[int] = field(default_factory=lambda: (20, 30, 40, 50))
+    highest_high_lookback_range: Sequence[int] = field(default_factory=lambda: (10, 20, 30, 40, 50, 60, 70))
+    take_profit_pct_candidates: Sequence[float] = field(default_factory=lambda: (0.0030, 0.0044, 0.0060, 0.0080))
+    risk_fraction_candidates: Sequence[float] = field(default_factory=lambda: (0.5, 0.7, 0.85, 0.95))
 
     # Bybit leverage and liquidation handling
     desired_leverage: int = 3
@@ -46,6 +50,7 @@ class TraderConfig:
     def as_log_string(self) -> str:
         return (
             f"Symbol: {self.symbol} | Category: {self.category}\n"
+            f"Contract type: {self.contract_type}\n"
             f"Backtest window (days): {self.backtest_days} | Aggregation: {self.agg_minutes}m\n"
             f"Requested leverage: {self.desired_leverage}x | Bybit cap: {self.bybit_max_leverage}x\n"
             f"Fees: {self.bybit_fee * 100:.2f}% per trade | Spread model: {self.spread_bps} bps | Slippage model: ~{self.slippage_bps} bps\n"

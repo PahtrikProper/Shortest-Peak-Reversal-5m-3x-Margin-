@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import product
 from typing import Dict, List
 
 import numpy as np
@@ -15,6 +16,8 @@ from .order_utils import bybit_fee_fn, calc_liq_price_short, resolve_leverage, s
 class StrategyParams:
     highest_high_lookback: int
     exit_type: str
+    risk_fraction: float
+    take_profit_pct: float
 
 
 @dataclass
@@ -108,7 +111,7 @@ class BacktestEngine:
                     equity_curve.append(balance)
                     continue
 
-                risk_fraction = min(max(self.config.risk_fraction, 0.0), 1.0)
+                risk_fraction = min(max(params.risk_fraction, 0.0), 1.0)
                 if risk_fraction == 0:
                     equity_curve.append(balance)
                     continue
@@ -131,7 +134,7 @@ class BacktestEngine:
                 liq_price = calc_liq_price_short(entry_price, int(leverage_used))
                 exit_target = self._exit_target_for_row(row, params.exit_type)
                 if np.isnan(exit_target) and entry_price is not None:
-                    exit_target = entry_price * (1 - self.config.take_profit_pct)
+                    exit_target = entry_price * (1 - params.take_profit_pct)
 
                 entry_time = row.name
                 entry_fill_status = fill_status
@@ -240,19 +243,22 @@ class BacktestEngine:
         total = (
             len(self.config.highest_high_lookback_range)
             * len(list(self.config.exit_type_candidates))
+            * len(list(self.config.risk_fraction_candidates))
+            * len(list(self.config.take_profit_pct_candidates))
         )
 
-        for hh_lb, exit_type in tqdm(
-            [
-                (hh_val, exit_type_val)
-                for hh_val in self.config.highest_high_lookback_range
-                for exit_type_val in self.config.exit_type_candidates
-            ],
+        for hh_lb, exit_type, risk_frac, tp_pct in tqdm(
+            product(
+                self.config.highest_high_lookback_range,
+                self.config.exit_type_candidates,
+                self.config.risk_fraction_candidates,
+                self.config.take_profit_pct_candidates,
+            ),
             total=total,
             desc="Param search",
             ncols=80,
         ):
-            params = StrategyParams(int(hh_lb), str(exit_type))
+            params = StrategyParams(int(hh_lb), str(exit_type), float(risk_frac), float(tp_pct))
             metrics = self._run_backtest(df_1m, params, capture_trades=False)
             results.append({**params.__dict__, **metrics.__dict__})
 

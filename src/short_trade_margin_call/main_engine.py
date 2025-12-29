@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import time
 from datetime import datetime, timedelta
+import math
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -23,6 +24,9 @@ class LiveTradingEngine:
         self.config = config
         self.params = params
         self.results = results
+        # Ensure live trading uses optimized sizing/targets.
+        self.config.risk_fraction = params.risk_fraction
+        self.config.take_profit_pct = params.take_profit_pct
         self.data_client = DataClient(config)
         self.sell_engine = SellOrderEngine(config)
         self.position: Optional[PositionState] = None
@@ -43,7 +47,11 @@ class LiveTradingEngine:
         return float("nan")
 
     def _prepare_live_dataframe(self) -> pd.DataFrame:
-        df_1m = self.data_client.fetch_bybit_bars(days=self.config.live_history_days, interval_minutes=self.config.agg_minutes)
+        bars_per_day = 24 * 60 / self.config.agg_minutes
+        min_bars = self.params.highest_high_lookback + self.config.min_history_padding
+        required_days = math.ceil(min_bars / bars_per_day)
+        history_days = max(self.config.live_history_days, required_days)
+        df_1m = self.data_client.fetch_bybit_bars(days=history_days, interval_minutes=self.config.agg_minutes)
         data = df_1m.copy().sort_index()
         lookback = self.params.highest_high_lookback
         data["prev_highest_high"] = data["High"].rolling(lookback).max().shift(1)
@@ -268,6 +276,10 @@ class MainEngine:
         best = dfres.sort_values("pnl_pct", ascending=False).head(1)
         results = summarize_results(best, self.config.starting_balance)
 
+        # Carry optimized sizing/targeting parameters into subsequent runs and live trading.
+        self.config.risk_fraction = float(best.iloc[0]["risk_fraction"])
+        self.config.take_profit_pct = float(best.iloc[0]["take_profit_pct"])
+
         print(f"\n==================== BEST SHORT PARAMETERS ({self.config.agg_minutes}m) ====================")
         print(best.to_string(index=False))
         print("\n============== BEST RESULTS (SHORT) ==============")
@@ -284,6 +296,8 @@ class MainEngine:
             StrategyParams(
                 int(best.iloc[0]["highest_high_lookback"]),
                 str(best.iloc[0]["exit_type"]),
+                float(best.iloc[0]["risk_fraction"]),
+                float(best.iloc[0]["take_profit_pct"]),
             ),
         )
         if not trades_df.empty:
@@ -301,7 +315,12 @@ class MainEngine:
         best, _, results = self.run_backtests()
 
         print("\nAuto-starting live paper trading immediately after backtests (per requirements).")
-        params = StrategyParams(int(best.iloc[0]["highest_high_lookback"]), str(best.iloc[0]["exit_type"]))
+        params = StrategyParams(
+            int(best.iloc[0]["highest_high_lookback"]),
+            str(best.iloc[0]["exit_type"]),
+            float(best.iloc[0]["risk_fraction"]),
+            float(best.iloc[0]["take_profit_pct"]),
+        )
         LiveTradingEngine(self.config, params, results).run()
 
 
