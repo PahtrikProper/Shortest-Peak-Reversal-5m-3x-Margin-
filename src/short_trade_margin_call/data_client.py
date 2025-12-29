@@ -19,12 +19,14 @@ class DataClient:
         symbol: Optional[str] = None,
         category: Optional[str] = None,
         days: Optional[int] = None,
+        contract_type: Optional[str] = None,
         interval_minutes: Optional[int] = None,
         max_retries: int = 5,
         backoff_seconds: float = 1.5,
     ) -> pd.DataFrame:
         symbol = symbol or self.config.symbol
         category = category or self.config.category
+        contract_type = contract_type or getattr(self.config, "contract_type", None)
         days = days or self.config.backtest_days
         interval_minutes = interval_minutes or self.config.agg_minutes
 
@@ -41,6 +43,8 @@ class DataClient:
                 "start": start * 1000,
                 "limit": 1000,
             }
+            if category in {"linear", "inverse"} and contract_type:
+                params["contractType"] = contract_type
             attempt = 0
             while True:
                 resp = requests.get(url, params=params, timeout=10)
