@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import product
 from typing import Dict, List
 
 import numpy as np
@@ -15,6 +16,8 @@ from .order_utils import bybit_fee_fn, calc_liq_price_short, resolve_leverage, s
 class StrategyParams:
     highest_high_lookback: int
     exit_type: str
+    risk_fraction: float
+    take_profit_pct: float
 
 
 @dataclass
@@ -95,6 +98,7 @@ class BacktestEngine:
         win_sizes: List[float] = []
         loss_sizes: List[float] = []
         trades: List[Dict] = [] if capture_trades else []
+        min_tp_pct = getattr(self.config, "min_take_profit_pct", 0.0033)
 
         warmup = params.highest_high_lookback + 1
         for i in range(warmup, len(data)):
@@ -108,7 +112,7 @@ class BacktestEngine:
                     equity_curve.append(balance)
                     continue
 
-                risk_fraction = min(max(self.config.risk_fraction, 0.0), 1.0)
+                risk_fraction = min(max(params.risk_fraction, 0.0), 1.0)
                 if risk_fraction == 0:
                     equity_curve.append(balance)
                     continue
@@ -128,10 +132,13 @@ class BacktestEngine:
                 qty = trade_value / entry_price
                 entry_fee = bybit_fee_fn(trade_value, self.config)
                 balance -= entry_fee + margin_used
-                liq_price = calc_liq_price_short(entry_price, int(leverage_used))
+                liq_price = calc_liq_price_short(entry_price, int(leverage_used), self.config)
                 exit_target = self._exit_target_for_row(row, params.exit_type)
+                min_tp_price = entry_price * (1 - min_tp_pct)
                 if np.isnan(exit_target) and entry_price is not None:
-                    exit_target = entry_price * (1 - self.config.take_profit_pct)
+                    exit_target = entry_price * (1 - params.take_profit_pct)
+                if exit_target is None or np.isnan(exit_target) or exit_target > min_tp_price:
+                    exit_target = min_tp_price
 
                 entry_time = row.name
                 entry_fill_status = fill_status
@@ -213,6 +220,34 @@ class BacktestEngine:
                 equity = balance
             equity_curve.append(max(equity, 0))
 
+        # If the dataset ends without hitting the minimum TP or triggering a margin call, count it as a loss.
+        if position_open and entry_price is not None and entry_time is not None:
+            final_close = data.iloc[-1]["Close"]
+            exit_fee = bybit_fee_fn(qty * final_close, self.config)
+            gross = (entry_price - final_close) * qty
+            net_pnl = gross - exit_fee
+            if net_pnl >= 0:
+                net_pnl = -abs(exit_fee)
+            balance += margin_used + net_pnl
+            losses += 1
+            loss_sizes.append((net_pnl / self.config.starting_balance) * 100)
+            if capture_trades:
+                trades.append(
+                    {
+                        "entry_time": entry_time,
+                        "exit_time": data.index[-1],
+                        "side": "SHORT",
+                        "entry_price": entry_price,
+                        "exit_price": final_close,
+                        "pnl_value": net_pnl,
+                        "pnl_pct": (net_pnl / self.config.starting_balance) * 100,
+                        "qty": qty,
+                        "exit_type": "min_tp_not_hit",
+                        "fill_status": entry_fill_status,
+                    }
+                )
+            equity_curve.append(max(balance, 0))
+
         if not equity_curve:
             return BacktestMetrics(0, 0, self.config.starting_balance, 0, 0, 0, None, 0, 0, 0, 0)
 
@@ -240,19 +275,22 @@ class BacktestEngine:
         total = (
             len(self.config.highest_high_lookback_range)
             * len(list(self.config.exit_type_candidates))
+            * len(list(self.config.risk_fraction_candidates))
+            * len(list(self.config.take_profit_pct_candidates))
         )
 
-        for hh_lb, exit_type in tqdm(
-            [
-                (hh_val, exit_type_val)
-                for hh_val in self.config.highest_high_lookback_range
-                for exit_type_val in self.config.exit_type_candidates
-            ],
+        for hh_lb, exit_type, risk_frac, tp_pct in tqdm(
+            product(
+                self.config.highest_high_lookback_range,
+                self.config.exit_type_candidates,
+                self.config.risk_fraction_candidates,
+                self.config.take_profit_pct_candidates,
+            ),
             total=total,
             desc="Param search",
             ncols=80,
         ):
-            params = StrategyParams(int(hh_lb), str(exit_type))
+            params = StrategyParams(int(hh_lb), str(exit_type), float(risk_frac), float(tp_pct))
             metrics = self._run_backtest(df_1m, params, capture_trades=False)
             results.append({**params.__dict__, **metrics.__dict__})
 
