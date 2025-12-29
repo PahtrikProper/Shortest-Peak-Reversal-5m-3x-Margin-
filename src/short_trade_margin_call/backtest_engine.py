@@ -8,7 +8,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from .config import TraderConfig
-from .order_utils import bybit_fee_fn, calc_liq_price_short, resolve_leverage
+from .order_utils import bybit_fee_fn, calc_liq_price_short, resolve_leverage, simulate_order_fill
 
 
 @dataclass
@@ -89,6 +89,7 @@ class BacktestEngine:
         qty = 0.0
         margin_used = 0.0
         exit_target = None
+        entry_fill_status: str | None = None
         wins = 0
         losses = 0
         win_sizes: List[float] = []
@@ -99,9 +100,20 @@ class BacktestEngine:
         for i in range(warmup, len(data)):
             row = data.iloc[i]
             close = row["Close"]
+            fill_price: float | None = None
 
             if not position_open and balance > 0 and bool(row["entry_signal"] and row["tradable"]):
-                margin_used = balance * self.config.risk_fraction
+                fill_price, fill_status = simulate_order_fill("short", close, self.config)
+                if fill_status != "filled" or fill_price is None:
+                    equity_curve.append(balance)
+                    continue
+
+                risk_fraction = min(max(self.config.risk_fraction, 0.0), 1.0)
+                if risk_fraction == 0:
+                    equity_curve.append(balance)
+                    continue
+
+                margin_used = balance * risk_fraction
                 if margin_used < self.config.min_notional:
                     equity_curve.append(balance)
                     continue
@@ -112,7 +124,7 @@ class BacktestEngine:
                     equity_curve.append(balance)
                     continue
 
-                entry_price = close
+                entry_price = fill_price
                 qty = trade_value / entry_price
                 entry_fee = bybit_fee_fn(trade_value, self.config)
                 balance -= entry_fee + margin_used
@@ -122,6 +134,7 @@ class BacktestEngine:
                     exit_target = entry_price * (1 - self.config.take_profit_pct)
 
                 entry_time = row.name
+                entry_fill_status = fill_status
                 position_open = True
 
             if position_open and entry_price is not None and liq_price is not None:
@@ -145,6 +158,7 @@ class BacktestEngine:
                                 "pnl_pct": (net_pnl / self.config.starting_balance) * 100,
                                 "qty": qty,
                                 "exit_type": "margin_call",
+                                "fill_status": entry_fill_status,
                             }
                         )
                     position_open = False
@@ -154,6 +168,7 @@ class BacktestEngine:
                     exit_target = None
                     qty = 0.0
                     margin_used = 0.0
+                    entry_fill_status = None
                 elif tp_hit:
                     exit_price = exit_target if tp_hit and exit_target is not None else close
                     exit_fee = bybit_fee_fn(qty * exit_price, self.config)
@@ -179,6 +194,7 @@ class BacktestEngine:
                                 "pnl_pct": (net_pnl / self.config.starting_balance) * 100,
                                 "qty": qty,
                                 "exit_type": params.exit_type,
+                                "fill_status": entry_fill_status,
                             }
                         )
                     position_open = False
@@ -188,6 +204,7 @@ class BacktestEngine:
                     exit_target = None
                     qty = 0.0
                     margin_used = 0.0
+                    entry_fill_status = None
 
             if position_open and entry_price is not None:
                 unrealized_pnl = (entry_price - close) * qty
