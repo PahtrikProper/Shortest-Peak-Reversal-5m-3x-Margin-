@@ -10,7 +10,7 @@ DEFAULT_AGG_MINUTES = 5
 class TraderConfig:
     symbol: str = "SOLUSDT"
     category: str = "linear"
-    backtest_days: int = 60
+    backtest_days: int = 3
     starting_balance: float = 472
     bybit_fee: float = 0.001
     agg_minutes: int = DEFAULT_AGG_MINUTES
