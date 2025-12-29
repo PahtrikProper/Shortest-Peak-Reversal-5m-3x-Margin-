@@ -24,12 +24,12 @@ class TraderConfig:
     # Strategy inputs
     highest_high_lookback: int = 50
     take_profit_pct: float = 0.0044  # used as a fallback target when no structure target is available
-    min_take_profit_pct: float = 0.0033  # minimum TP (0.33%); failing to hit counts as a loss
+    min_take_profit_pct: float = 0.0022  # minimum TP (0.22%); failing to hit counts as a loss
     # Only structural exits are searched by default; midpoint remains supported for backwards compatibility.
     exit_type_candidates: Sequence[str] = field(default_factory=lambda: ("highest_low", "lowest_high"))
 
     highest_high_lookback_range: Sequence[int] = field(default_factory=lambda: (10, 20, 30, 40, 50, 60, 70))
-    take_profit_pct_candidates: Sequence[float] = field(default_factory=lambda: (0.0033, 0.0044, 0.0060, 0.0080))
+    take_profit_pct_candidates: Sequence[float] = field(default_factory=lambda: (0.0022, 0.0044, 0.0060, 0.0080))
     risk_fraction_candidates: Sequence[float] = field(default_factory=lambda: (0.5, 0.7, 0.85, 0.95))
 
     # Bybit leverage and liquidation handling
