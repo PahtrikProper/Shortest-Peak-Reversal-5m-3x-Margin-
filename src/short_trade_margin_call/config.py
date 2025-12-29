@@ -10,7 +10,7 @@ DEFAULT_AGG_MINUTES = 5
 class TraderConfig:
     symbol: str = "SOLUSDT"
     category: str = "linear"
-    backtest_days: int = 60
+    backtest_days: int = 7
     starting_balance: float = 472
     bybit_fee: float = 0.001
     agg_minutes: int = DEFAULT_AGG_MINUTES
@@ -25,7 +25,9 @@ class TraderConfig:
     take_profit_pct: float = 0.0044  # used as a fallback target when no structure target is available
     exit_type_candidates: Sequence[str] = field(default_factory=lambda: ("highest_low", "lowest_high", "midpoint"))
 
-    highest_high_lookback_range: Sequence[int] = field(default_factory=lambda: (20, 30, 40, 50))
+    highest_high_lookback_range: Sequence[int] = field(default_factory=lambda: (10, 20, 30, 40, 50, 60, 70))
+    take_profit_pct_candidates: Sequence[float] = field(default_factory=lambda: (0.0030, 0.0044, 0.0060, 0.0080))
+    risk_fraction_candidates: Sequence[float] = field(default_factory=lambda: (0.5, 0.7, 0.85, 0.95))
 
     # Bybit leverage and liquidation handling
     desired_leverage: int = 3
