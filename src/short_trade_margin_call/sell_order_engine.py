@@ -28,15 +28,19 @@ class SellOrderEngine:
         self,
         row: pd.Series,
         available_usdt: float,
+        use_raw_mid_price: bool = False,
     ) -> Tuple[Optional[PositionState], str, float, float, float]:
-        entry_price, status = simulate_order_fill("short", row["Close"], self.config)
+        if use_raw_mid_price:
+            entry_price, status = float(row["Close"]), "filled"
+        else:
+            entry_price, status = simulate_order_fill("short", row["Close"], self.config)
         if status == "rejected" or entry_price is None:
             return None, status, 0.0, 0.0, 0.0
 
         if available_usdt <= 0:
             return None, "insufficient_funds", 0.0, 0.0, 0.0
 
-        risk_fraction = min(max(self.config.risk_fraction, 0.0), 1.0)
+        risk_fraction = min(max(self.config.risk_fraction, 0.0), self.config.max_risk_fraction)
         if risk_fraction == 0:
             return None, "insufficient_funds", 0.0, 0.0, 0.0
 
@@ -48,7 +52,7 @@ class SellOrderEngine:
         qty = trade_value / entry_price
         entry_fee = bybit_fee_fn(trade_value, self.config)
 
-        liq_price = calc_liq_price_short(entry_price, int(leverage_used))
+        liq_price = calc_liq_price_short(entry_price, int(leverage_used), self.config)
 
         position = PositionState(
             side="short",
