@@ -24,6 +24,9 @@ class LiveTradingEngine:
         self.config = config
         self.params = params
         self.results = results
+        # Ensure live trading uses optimized sizing/targets.
+        self.config.risk_fraction = params.risk_fraction
+        self.config.take_profit_pct = params.take_profit_pct
         self.data_client = DataClient(config)
         self.sell_engine = SellOrderEngine(config)
         self.position: Optional[PositionState] = None
@@ -273,6 +276,10 @@ class MainEngine:
         best = dfres.sort_values("pnl_pct", ascending=False).head(1)
         results = summarize_results(best, self.config.starting_balance)
 
+        # Carry optimized sizing/targeting parameters into subsequent runs and live trading.
+        self.config.risk_fraction = float(best.iloc[0]["risk_fraction"])
+        self.config.take_profit_pct = float(best.iloc[0]["take_profit_pct"])
+
         print(f"\n==================== BEST SHORT PARAMETERS ({self.config.agg_minutes}m) ====================")
         print(best.to_string(index=False))
         print("\n============== BEST RESULTS (SHORT) ==============")
@@ -289,6 +296,8 @@ class MainEngine:
             StrategyParams(
                 int(best.iloc[0]["highest_high_lookback"]),
                 str(best.iloc[0]["exit_type"]),
+                float(best.iloc[0]["risk_fraction"]),
+                float(best.iloc[0]["take_profit_pct"]),
             ),
         )
         if not trades_df.empty:
@@ -306,7 +315,12 @@ class MainEngine:
         best, _, results = self.run_backtests()
 
         print("\nAuto-starting live paper trading immediately after backtests (per requirements).")
-        params = StrategyParams(int(best.iloc[0]["highest_high_lookback"]), str(best.iloc[0]["exit_type"]))
+        params = StrategyParams(
+            int(best.iloc[0]["highest_high_lookback"]),
+            str(best.iloc[0]["exit_type"]),
+            float(best.iloc[0]["risk_fraction"]),
+            float(best.iloc[0]["take_profit_pct"]),
+        )
         LiveTradingEngine(self.config, params, results).run()
 
 
