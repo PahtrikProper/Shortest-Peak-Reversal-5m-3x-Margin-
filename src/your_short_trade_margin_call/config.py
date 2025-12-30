@@ -10,7 +10,7 @@ DEFAULT_AGG_MINUTES = 3
 class TraderConfig:
     symbol: str = "SOLUSDT"
     category: str = "linear"
-    backtest_days: int = 1
+    backtest_days: float = 0.125  # 3 hours
     contract_type: str = "LinearPerpetual"  # Bybit futures contract type
     starting_balance: float = 472
     bybit_fee: float = 0.001
@@ -55,7 +55,7 @@ class TraderConfig:
         return (
             f"Symbol: {self.symbol} | Category: {self.category}\n"
             f"Contract type: {self.contract_type}\n"
-            f"Backtest window (days): {self.backtest_days} | Aggregation: {self.agg_minutes}m\n"
+            f"Backtest window (days): {self.backtest_days} (~{self.backtest_days*24:.1f}h) | Aggregation: {self.agg_minutes}m\n"
             f"Requested leverage: {self.desired_leverage}x | Bybit cap: {self.bybit_max_leverage}x\n"
             f"Fees: {self.bybit_fee * 100:.2f}% per trade | Spread model: {self.spread_bps} bps | Slippage model: ~{self.slippage_bps} bps\n"
             f"Order reject probability: {self.order_reject_prob * 100:.2f}% | Max simulated latency: {self.max_fill_latency}s\n"
