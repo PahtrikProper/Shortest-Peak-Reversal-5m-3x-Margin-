@@ -8,7 +8,7 @@ DEFAULT_AGG_MINUTES = 3
 
 @dataclass
 class TraderConfig:
-    symbol: str = "SOLUSDT"
+    symbol: str = "ADAUSDT"
     category: str = "linear"
     backtest_days: int = 1
     contract_type: str = "LinearPerpetual"  # Bybit futures contract type
