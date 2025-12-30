@@ -3,14 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Iterable, Sequence
 
-DEFAULT_AGG_MINUTES = 5
+DEFAULT_AGG_MINUTES = 3
 
 
 @dataclass
 class TraderConfig:
     symbol: str = "SOLUSDT"
     category: str = "linear"
-    backtest_days: int = 7
+    backtest_days: int = 1
     contract_type: str = "LinearPerpetual"  # Bybit futures contract type
     starting_balance: float = 472
     bybit_fee: float = 0.001

@@ -256,7 +256,7 @@ class MainEngine:
 
     def queue_best_params(self, best: pd.Series, results: Dict[str, float], elapsed_seconds: float) -> Dict:
         queued_at = datetime.utcnow()
-        ready_at = queued_at + timedelta(days=2)
+        ready_at = queued_at + timedelta(hours=12)
         payload = {
             "symbol": self.config.symbol,
             "category": self.config.category,
