@@ -17,9 +17,18 @@ from __future__ import annotations
 import os
 import sys
 
-from .config import TraderConfig
-from .main_engine import MainEngine
-from .paths import DATA_DIR
+if __package__ is None or __package__ == "":
+    # Allow execution as a script: python src/your_short_trade_margin_call/start.py
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if repo_root not in sys.path:
+        sys.path.append(repo_root)
+    from your_short_trade_margin_call.config import TraderConfig  # type: ignore
+    from your_short_trade_margin_call.main_engine import MainEngine  # type: ignore
+    from your_short_trade_margin_call.paths import DATA_DIR  # type: ignore
+else:
+    from .config import TraderConfig
+    from .main_engine import MainEngine
+    from .paths import DATA_DIR
 
 
 def run():
