@@ -1,9 +1,10 @@
 # Shortest Peak Reversal – 3m, 3x Margin
 
-A short-biased peak-reversal strategy that backtests a highest-high breakdown on 3m candles, saves the best parameters, and (optionally) runs a live trading loop. This repository contains a single strategy package plus its supporting data and notes.
+A short-biased peak-reversal strategy that backtests a highest-high breakdown on 3m candles, saves the best parameters, and (optionally) runs a live trading loop. Two copies are provided: the original SOLUSDT strategy (`short_trade_margin_call`) and a parallel ADAUSDT variant (`ada_short_trade_margin_call`).
 
 ## Repository layout
-- `src/short_trade_margin_call/` – the strategy package (backtests, optimizer, live/paper trade entry points).
+- `src/short_trade_margin_call/` – the SOLUSDT strategy package (backtests, optimizer, live/paper trade entry points).
+- `src/ada_short_trade_margin_call/` – the ADAUSDT strategy package (same engine, symbol defaults set to ADA).
 - `data/` – runtime artifacts shared by the engines (`best_params.json`, `optimization_queue.json`).
 - `notes/` – research notes for the workflow (`notes/strategy_overview.md`).
 - `tests/` – placeholder for future automated tests.
@@ -33,6 +34,10 @@ Set `PYTHONPATH=src` from the repository root, then run one of the following:
 - Live trading using previously saved params:
   ```bash
   PYTHONPATH=src python -m short_trade_margin_call.live
+  ```
+- ADAUSDT variant (optimize + live):
+  ```bash
+  PYTHONPATH=src python -m ada_short_trade_margin_call
   ```
 
 ## Behavior overview
