@@ -24,8 +24,6 @@ def load_saved_params(best_params_path: Optional[Path] = None) -> Optional[Strat
         return StrategyParams(
             int(params["highest_high_lookback"]),
             str(params["exit_type"]),
-            float(params.get("risk_fraction", 0.95)),
-            float(params.get("take_profit_pct", 0.0044)),
         )
     except Exception as exc:  # noqa: BLE001
         print(f"Saved params missing fields: {exc}")
