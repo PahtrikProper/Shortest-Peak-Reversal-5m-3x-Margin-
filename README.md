@@ -23,6 +23,14 @@ Set `PYTHONPATH=src` from the repository root, then run:
   ```bash
   PYTHONPATH=src python -m your_short_trade_margin_call
   ```
+- ADAUSDT variant (optimize + live):
+  ```bash
+  PYTHONPATH=src python -m ada_short_trade_margin_call
+  ```
+- Interactive variant (prompts for USDT pair on start, stores artifacts under `data/your/`):
+  ```bash
+  PYTHONPATH=src python -m your_short_trade_margin_call
+  ```
 
 ## Behavior overview
 - `BacktestEngine` sweeps `highest_high_lookback`, exit types, risk fractions, and take-profit candidates to find the best-performing parameters.
