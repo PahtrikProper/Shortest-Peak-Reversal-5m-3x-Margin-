@@ -6,17 +6,11 @@ from typing import Optional, Tuple
 import pandas as pd
 
 from .config import TraderConfig
-from .order_utils import (
-    PositionState,
-    bybit_fee_fn,
-    calc_liq_price_short,
-    resolve_leverage,
-    simulate_order_fill,
-)
+from .order_utils import PositionState, bybit_fee_fn, calc_liq_price_long, resolve_leverage, simulate_order_fill
 
 
 @dataclass
-class SellOrderEngine:
+class BuyOrderEngine:
     config: TraderConfig
 
     def should_enter(self, row: pd.Series, position_side: Optional[str]) -> bool:
@@ -28,34 +22,30 @@ class SellOrderEngine:
         self,
         row: pd.Series,
         available_usdt: float,
-        use_raw_mid_price: bool = False,
-    ) -> Tuple[Optional[PositionState], str, float, float, float, str]:
-        if use_raw_mid_price:
-            entry_price, status = float(row["Close"]), "filled"
-        else:
-            entry_price, status = simulate_order_fill("short", row["Close"], self.config)
+    ) -> Tuple[Optional[PositionState], str, float, float, float]:
+        entry_price, status = simulate_order_fill("long", row["Close"], self.config)
         if status == "rejected" or entry_price is None:
-            return None, status, 0.0, 0.0, 0.0, "order_rejected_or_no_fill"
+            return None, status, 0.0, 0.0, 0.0
 
         if available_usdt <= 0:
-            return None, "insufficient_funds", 0.0, 0.0, 0.0, "no_balance_available"
+            return None, "insufficient_funds", 0.0, 0.0, 0.0
 
-        risk_fraction = min(max(self.config.risk_fraction, 0.0), self.config.max_risk_fraction)
+        risk_fraction = min(max(self.config.risk_fraction, 0.0), 1.0)
         if risk_fraction == 0:
-            return None, "insufficient_funds", 0.0, 0.0, 0.0, "risk_fraction_zero"
+            return None, "insufficient_funds", 0.0, 0.0, 0.0
 
         margin_used = available_usdt * risk_fraction
         leverage_used = resolve_leverage(margin_used, self.config.desired_leverage, self.config)
         trade_value = margin_used * leverage_used
         if trade_value < self.config.min_notional:
-            return None, "min_notional_not_met", 0.0, 0.0, 0.0, "below_min_notional"
+            return None, "min_notional_not_met", 0.0, 0.0, 0.0
         qty = trade_value / entry_price
         entry_fee = bybit_fee_fn(trade_value, self.config)
 
-        liq_price = calc_liq_price_short(entry_price, int(leverage_used), self.config)
+        liq_price = calc_liq_price_long(entry_price, int(leverage_used))
 
         position = PositionState(
-            side="short",
+            side="long",
             entry_price=entry_price,
             liq_price=liq_price,
             qty=qty,
