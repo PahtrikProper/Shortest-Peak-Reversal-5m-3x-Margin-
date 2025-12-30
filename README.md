@@ -1,6 +1,6 @@
-# Shortest Peak Reversal – 5m, 3x Margin
+# Shortest Peak Reversal – 3m, 3x Margin
 
-A short-biased peak-reversal strategy that backtests a highest-high breakdown on 5m candles, saves the best parameters, and (optionally) runs a live trading loop. This repository contains a single strategy package plus its supporting data and notes.
+A short-biased peak-reversal strategy that backtests a highest-high breakdown on 3m candles, saves the best parameters, and (optionally) runs a live trading loop. This repository contains a single strategy package plus its supporting data and notes.
 
 ## Repository layout
 - `src/short_trade_margin_call/` – the strategy package (backtests, optimizer, live/paper trade entry points).
@@ -39,7 +39,7 @@ Set `PYTHONPATH=src` from the repository root, then run one of the following:
 - `BacktestEngine` sweeps `highest_high_lookback` and exit-type candidates to find the best-performing parameters.
 - `MainEngine` coordinates optimization, persists `data/best_params.json`, and enqueues new runs in `data/optimization_queue.json`.
 - `LiveTradingEngine` streams Bybit klines, applies the short breakout logic, and manages exits/margin calls.
-- Backtests simulate the same microstructure as paper/live trading: spread + slippage on fills, random rejects, fee debits, leverage clamping, liquidation checks, and structured exits.
+- Backtests simulate the same microstructure as paper/live trading: spread + slippage on fills, random rejects, fee debits, leverage clamping, liquidation checks, structured exits, a Bybit-like cap on available balance usage (risk is capped at the configured maximum fraction), and verbose logging of blocked trades (e.g., insufficient history, no edge, rejects, risk/min-notional limits). Live paper fills use the current mid price by default. Defaults target ~24 hours of 3m Bybit futures data, with re-optimization queued every ~12 hours.
 - `paths.py` centralizes repository and `data/` paths so artifacts land in a single shared folder.
 
 ## Getting started
