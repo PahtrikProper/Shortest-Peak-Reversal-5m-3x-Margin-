@@ -164,6 +164,7 @@ class BacktestEngine:
             equity_curve.append(balance + (position.margin_used if position else 0))
 
         if position is not None:
+            # Close any open trade at the last available price rather than force-marking it as a loss.
             final_close = float(data.iloc[-1]["Close"])
             gross = (position.entry_price - final_close) * position.qty
             balance += position.margin_used + gross
@@ -185,7 +186,7 @@ class BacktestEngine:
                         "pnl_value": gross,
                         "pnl_pct": pnl_pct,
                         "qty": position.qty,
-                        "exit_type": "eod",
+                        "exit_type": "final_close",
                     }
                 )
             equity_curve.append(balance)
