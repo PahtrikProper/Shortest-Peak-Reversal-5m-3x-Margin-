@@ -273,24 +273,35 @@ class BacktestEngine:
     def grid_search_with_progress(self, df_1m: pd.DataFrame) -> pd.DataFrame:
         results: List[Dict] = []
         total = (
-            len(self.config.highest_high_lookback_range)
-            * len(list(self.config.exit_type_candidates))
-            * len(list(self.config.risk_fraction_candidates))
-            * len(list(self.config.take_profit_pct_candidates))
+            len(self.config.sma_period_range)
+            * len(self.config.stoch_period_range)
+            * len(self.config.use_macd_options)
+            * len(self.config.use_signal_options)
+            * len(self.config.use_momentum_exit_options)
         )
 
-        for hh_lb, exit_type, risk_frac, tp_pct in tqdm(
+        for sma_p, stoch_p, use_macd, use_signal, use_mom in tqdm(
             product(
-                self.config.highest_high_lookback_range,
-                self.config.exit_type_candidates,
-                self.config.risk_fraction_candidates,
-                self.config.take_profit_pct_candidates,
+                self.config.sma_period_range,
+                self.config.stoch_period_range,
+                self.config.use_macd_options,
+                self.config.use_signal_options,
+                self.config.use_momentum_exit_options,
             ),
             total=total,
             desc="Param search",
             ncols=80,
         ):
-            params = StrategyParams(int(hh_lb), str(exit_type), float(risk_frac), float(tp_pct))
+            params = StrategyParams(
+                sma_period=int(sma_p),
+                stoch_period=int(stoch_p),
+                macd_fast=self.config.macd_fast,
+                macd_slow=self.config.macd_slow,
+                macd_signal=self.config.macd_signal,
+                use_macd=bool(use_macd),
+                use_signal=bool(use_signal),
+                use_momentum_exit=bool(use_mom),
+            )
             metrics = self._run_backtest(df_1m, params, capture_trades=False)
             results.append({**params.__dict__, **metrics.__dict__})
 
