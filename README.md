@@ -1,9 +1,10 @@
-# Short Trader Multi Filter – 3m, 3x Margin (interactive)
+# Short Trader Multi Filter – 3m, ~10x, 95% Funds (interactive)
 
-A short-only, multi-filter strategy that backtests a highest-low / momentum-style setup using centered Stoch, SMA, and optional MACD/Signal filters on 3m candles. It backtests ~3 hours of history, locks a 0.4% take-profit, and (optionally) runs a live loop for a USDT pair you choose at startup.
+This repository publishes a single active strategy: **short_trader_multi_filter**. All other legacy strategies have been moved under `archived_strategies/`. The active strategy backtests a short-only, multi-filter setup (centered Stoch, SMA, optional MACD/Signal) on 3m candles over ~3 hours of history, locks a 0.4% take-profit, and (optionally) runs a live loop for a USDT pair you choose at startup.
 
 ## Repository layout
 - `src/short_trader_multi_filter/` – interactive strategy package (prompts for USDT pair, runs backtests, stores artifacts under `data/multi_filter/`).
+- `archived_strategies/` – legacy/retired strategy folders.
 - `data/` – runtime artifacts produced at execution (per-symbol under `data/multi_filter/`).
 - `notes/` – strategy notes.
 - `tests/` – placeholder.
@@ -11,6 +12,7 @@ A short-only, multi-filter strategy that backtests a highest-low / momentum-styl
 ```
 .
 ├── src/short_trader_multi_filter/   # Interactive strategy package (backtest + optimizer)
+├── archived_strategies/             # Legacy/retired strategies
 ├── data/                            # JSON artifacts produced at runtime (per-symbol under data/multi_filter/)
 ├── notes/                           # Strategy notes
 └── tests/                           # (empty placeholder)
