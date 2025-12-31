@@ -63,8 +63,12 @@ def calc_liq_price_long(entry_price: float, leverage: int) -> float:
     return entry_price * (1 - 1 / leverage)
 
 
-def calc_liq_price_short(entry_price: float, leverage: int) -> float:
-    return entry_price * (1 + 1 / leverage)
+def calc_liq_price_short(entry_price: float, leverage: int, config: TraderConfig) -> float:
+    """Approximate Bybit linear perp liquidation with maintenance margin + taker fee."""
+    mm_rate = getattr(config, "maintenance_margin_rate", 0.004)
+    taker_fee = config.bybit_fee
+    liq_price = entry_price * (1 + (1 / leverage) - mm_rate + taker_fee)
+    return max(liq_price, 0.0)
 
 
 def allowed_leverage_for_notional(notional: float, tiers: Sequence[tuple[float, int]], max_leverage: int) -> int:
