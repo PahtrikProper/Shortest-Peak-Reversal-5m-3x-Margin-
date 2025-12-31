@@ -4,7 +4,7 @@ This repository publishes a single active strategy: **short_trader_multi_filter*
 
 ## Repository layout
 - `src/short_trader_multi_filter/` – interactive strategy package (prompts for USDT pair, runs backtests, stores artifacts under `data/multi_filter/`).
-- `src/LIVE_short_trader_multi_filter/` – **live Bybit futures** variant that reuses the optimizer, syncs equity/positions via the official Bybit HTTP client, and submits live short orders.
+- `src/LIVE_short_trader_multi_filter/` – **live Bybit futures** variant that reuses the optimizer, syncs equity/positions via the official Bybit HTTP client (see `bybit_official_git_repo_scripts/`), and submits live short orders.
 - `archived_strategies/` – legacy/retired strategy folders.
 - `data/` – runtime artifacts produced at execution (per-symbol under `data/multi_filter/`).
 - `notes/` – strategy notes.
@@ -19,13 +19,35 @@ This repository publishes a single active strategy: **short_trader_multi_filter*
 └── tests/                           # (empty placeholder)
 ```
 
-## Entry point
+## Entry points
 Set `PYTHONPATH=src` from the repository root, then run the optimizer + live launcher:
 
 ```bash
 PYTHONPATH=src python -m short_trader_multi_filter
 ```
-You will be prompted for a USDT pair (e.g., BTCUSDT). The app backtests ~3 hours of 3m futures data, selects the best parameters from the configured grid, and saves artifacts under `data/multi_filter/`.
+You will be prompted for a USDT pair (e.g., BTCUSDT). The app backtests ~3 hours of 3m Bybit **linear futures** data, selects the best parameters from the configured grid, and saves artifacts under `data/multi_filter/`.
+
+To run the live Bybit futures executor with your saved parameters and API keys (unified account, linear category):
+
+```bash
+export BYBIT_API_KEY=your_key
+export BYBIT_API_SECRET=your_secret
+PYTHONPATH=src python -m LIVE_short_trader_multi_filter
+```
+Set `testnet=True` in `TraderConfig` if you want to validate flows on Bybit testnet first. The live loop uses the official client in `bybit_official_git_repo_scripts` for wallet/position reads and order submission.
+
+### Runtime configuration (key fields in `TraderConfig`)
+- `symbol` / `category`: defaults to `BTCUSDT` / `linear`.
+- `api_key` / `api_secret` / `testnet`: injected from env or edited in `config.py`. Use a Unified account key.
+- `settlement_coin`: `USDT` by default.
+- `time_in_force`: `IOC` by default for market orders with TP.
+- `desired_leverage`: target leverage when sizing shorts (equity pull each bar keeps sizing honest).
+- `risk_fraction` / `margin_rate`: control position sizing and liquidation buffer.
+- Strategy knobs: `sma_period`, `stoch_period`, `smooth_k`, `macd_fast/slow/signal`, `use_macd`, `use_signal`, `use_momentum_exit`.
+
+### Data and artifacts
+- Backtests fetch Bybit REST klines from `/v5/market/kline` (linear category) for the configured window/interval.
+- Optimizer and live artifacts are saved under `data/multi_filter/` (e.g., `best_params.json`).
 
 To run the live Bybit futures executor with your saved parameters and API keys (unified account, linear category):
 
