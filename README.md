@@ -49,6 +49,15 @@ Set `testnet=True` in `TraderConfig` if you want to validate flows on Bybit test
 - Backtests fetch Bybit REST klines from `/v5/market/kline` (linear category) for the configured window/interval.
 - Optimizer and live artifacts are saved under `data/multi_filter/` (e.g., `best_params.json`).
 
+To run the live Bybit futures executor with your saved parameters and API keys (unified account, linear category):
+
+```bash
+export BYBIT_API_KEY=your_key
+export BYBIT_API_SECRET=your_secret
+PYTHONPATH=src python -m LIVE_short_trader_multi_filter
+```
+Set `testnet=True` in `TraderConfig` if you want to validate flows on Bybit testnet first. The live loop uses the official client in `bybit_official_git_repo_scripts` for wallet/position reads and order submission.
+
 ## Behavior overview
 - Filters: SMA on close, centered Stoch %K (smoothed), optional MACD and Signal. Date filter blocks entries before the configured start year/month.
 - Entry (short only, one position at a time):
