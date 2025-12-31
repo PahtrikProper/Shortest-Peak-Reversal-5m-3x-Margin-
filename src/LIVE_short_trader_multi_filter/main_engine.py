@@ -10,6 +10,7 @@ import pandas as pd
 from .backtest_engine import BacktestEngine, StrategyParams, summarize_results
 from .config import TraderConfig
 from .data_client import DataClient
+from .live_trading_client import BybitLiveClient
 from .paths import DATA_DIR
 
 
@@ -19,8 +20,36 @@ class LiveTradingEngine:
         self.params = params
         self.results = results
         self.data_client = DataClient(config)
+        self.bybit = BybitLiveClient(config)
         self.position: Optional[Dict] = None
         self.equity = config.starting_balance
+        self._bootstrap_position()
+
+    def _bootstrap_position(self) -> None:
+        """Populate any existing short position from the account to avoid duplicate entries."""
+        existing = self.bybit.get_position()
+        if existing:
+            try:
+                qty = float(existing.get("size", 0) or 0)
+                entry_price = float(existing.get("avgPrice") or 0)
+                liq_price = float(existing.get("liqPrice") or 0)
+                self.position = {
+                    "entry_price": entry_price,
+                    "qty": qty,
+                    "tp_price": None,
+                    "margin_used": 0.0,
+                    "entry_time": pd.Timestamp.utcnow(),
+                    "liq_price": liq_price,
+                    "orderId": existing.get("positionIdx"),
+                }
+            except Exception as exc:  # noqa: BLE001
+                print(f"Unable to hydrate existing position: {exc}")
+
+    def _refresh_equity(self) -> float:
+        equity = self.bybit.fetch_equity()
+        if equity is not None:
+            self.equity = equity
+        return float(self.equity)
 
     def _prepare_dataframe(self) -> pd.DataFrame:
         bars = self.data_client.fetch_bybit_bars(days=self.config.live_history_days, interval_minutes=self.config.agg_minutes)
@@ -54,26 +83,34 @@ class LiveTradingEngine:
         return lows_ok and sma_ok and macd_ok and signal_ok and not pd.isna(row["sma"])
 
     def _enter(self, row: pd.Series):
+        equity = self._refresh_equity()
         risk_fraction = self.config.risk_fraction
         margin_rate = self.config.margin_rate
-        position_value = (self.equity * risk_fraction) / margin_rate
+        position_value = (equity * risk_fraction) / margin_rate
         qty = position_value / float(row["Close"])
-        margin_used = self.equity * risk_fraction
-        if margin_used <= 0 or qty <= 0:
+        if qty <= 0:
+            print("Skipping entry: computed quantity <= 0")
             return
-        self.equity -= margin_used
         tp_price = float(row["Close"]) * (1 - 0.004)
-        # approximate liquidation similar to Bybit short: entry * (1 + margin_rate)
-        liq_price = float(row["Close"]) * (1 + margin_rate)
-        self.position = {
-            "entry_price": float(row["Close"]),
-            "tp_price": tp_price,
-            "qty": qty,
-            "margin_used": margin_used,
-            "entry_time": row.name,
-            "liq_price": liq_price,
-        }
-        print(f"ENTER SHORT @ {row['Close']:.6f} qty={qty:.4f} TP={tp_price:.6f} LIQ={liq_price:.6f} Equity={self.equity:.2f}")
+        try:
+            response = self.bybit.place_short_market(qty=qty, tp_price=tp_price)
+            result = response.get("result", {})
+            entry_price = float(result.get("avgPrice") or row["Close"])
+            self.position = {
+                "entry_price": entry_price,
+                "tp_price": tp_price,
+                "qty": qty,
+                "margin_used": position_value / max(self.config.desired_leverage, 1.0),
+                "entry_time": row.name,
+                "liq_price": float(result.get("liqPrice") or entry_price * (1 + margin_rate)),
+                "orderId": result.get("orderId"),
+            }
+            print(
+                f"ENTER SHORT LIVE @ {entry_price:.6f} qty={qty:.4f} TP={tp_price:.6f} "
+                f"orderId={self.position['orderId']} equity≈{equity:.2f}"
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(f"Live entry failed: {exc}")
 
     def _maybe_exit(self, data: pd.DataFrame):
         if self.position is None:
@@ -95,39 +132,44 @@ class LiveTradingEngine:
             exit_type = "momentum"
         if exit_price is None:
             return
-        gross = (self.position["entry_price"] - exit_price) * self.position["qty"]
-        self.equity += self.position["margin_used"] + gross
-        print(
-            f"EXIT @ {exit_price:.6f} type={exit_type} pnl={gross:.4f} equity={self.equity:.2f}"
-        )
-        self.position = None
+        try:
+            response = self.bybit.close_short_market(qty=self.position["qty"])
+            order_id = response.get("result", {}).get("orderId")
+            print(
+                f"EXIT LIVE @ {exit_price:.6f} type={exit_type} qty={self.position['qty']:.4f} "
+                f"orderId={order_id}"
+            )
+            self._refresh_equity()
+            self.position = None
+        except Exception as exc:  # noqa: BLE001
+            print(f"Live exit failed: {exc}")
 
     def _log_status(self, row: pd.Series):
         nowstr = row.name.strftime("%Y-%m-%d %H:%M")
+        equity = self._refresh_equity()
         if self.position:
             print(
                 f"{nowstr} | STATUS | pos=SHORT qty={self.position['qty']:.4f} "
                 f"entry={self.position['entry_price']:.6f} tp={self.position['tp_price']:.6f} "
                 f"liq={self.position.get('liq_price', float('nan')):.6f} "
-                f"last={float(row['Close']):.6f} equity={self.equity:.2f}"
+                f"last={float(row['Close']):.6f} equity={equity:.2f}"
             )
         else:
             print(
                 f"{nowstr} | STATUS | flat | last={float(row['Close']):.6f} "
                 f"sma={float(row['sma']):.6f} k={float(row['k']):.3f} "
                 f"macd={float(row['macd']):.6f} signal={float(row['signal']):.6f} "
-                f"equity={self.equity:.2f}"
+                f"equity={equity:.2f}"
             )
 
     def run(self):
-        print("\n--- Live Short Trader (multi-filter) ---\n")
+        print("\n--- Live Short Trader (multi-filter, Bybit futures) ---\n")
         while True:
             try:
                 data = self._prepare_dataframe()
                 self._maybe_exit(data)
                 if self._should_enter(data):
                     self._enter(data.iloc[-1])
-                # Always provide a heartbeat so paper trading has useful updates.
                 self._log_status(data.iloc[-1])
                 time.sleep(60 * self.config.agg_minutes)
             except KeyboardInterrupt:

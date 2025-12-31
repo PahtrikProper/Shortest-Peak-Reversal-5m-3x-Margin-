@@ -22,8 +22,14 @@ def load_saved_params(best_params_path: Optional[Path] = None) -> Optional[Strat
     params = payload.get("params", {})
     try:
         return StrategyParams(
-            int(params["highest_high_lookback"]),
-            str(params["exit_type"]),
+            int(params["sma_period"]),
+            int(params["stoch_period"]),
+            int(params["macd_fast"]),
+            int(params["macd_slow"]),
+            int(params["macd_signal"]),
+            bool(params["use_macd"]),
+            bool(params["use_signal"]),
+            bool(params["use_momentum_exit"]),
         )
     except Exception as exc:  # noqa: BLE001
         print(f"Saved params missing fields: {exc}")

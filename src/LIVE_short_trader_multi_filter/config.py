@@ -14,6 +14,13 @@ class TraderConfig:
     contract_type: str = "LinearPerpetual"
     starting_balance: float = 1000.0
     bybit_fee: float = 0.0  # commission = 0
+    api_key: str = ""
+    api_secret: str = ""
+    testnet: bool = False
+    account_type: str = "UNIFIED"
+    settlement_coin: str = "USDT"
+    recv_window: int = 5000
+    log_requests: bool = False
     agg_minutes: int = DEFAULT_AGG_MINUTES
     spread_bps: int = 0
     slippage_bps: int = 0
@@ -46,13 +53,16 @@ class TraderConfig:
     # Live loop options
     live_history_days: int = 1
     min_history_padding: int = 200
+    time_in_force: str = "IOC"
+    desired_leverage: float = 3.0
 
     def as_log_string(self) -> str:
         return (
             f"Symbol: {self.symbol} | Category: {self.category}\n"
-            f"Contract type: {self.contract_type}\n"
+            f"Contract type: {self.contract_type} | Account: {self.account_type} | Testnet: {self.testnet}\n"
             f"Backtest window (days): {self.backtest_days} (~{self.backtest_days*24:.1f}h) | Aggregation: {self.agg_minutes}m\n"
             f"Fees: {self.bybit_fee * 100:.2f}% | Spread: {self.spread_bps} bps | Slippage: {self.slippage_bps} bps\n"
             f"Risk per entry: {self.risk_fraction * 100:.1f}% equity | Margin rate: {self.margin_rate * 100:.1f}% | Start date: {self.start_year}-{self.start_month:02d}\n"
+            f"TIF: {self.time_in_force} | Desired leverage: {self.desired_leverage}x | Settlement: {self.settlement_coin}\n"
             "Strategy: Short-only, date-filtered, SMA + centered Stoch + optional MACD/Signal filters, fixed 0.4% TP, optional momentum exit."
         )

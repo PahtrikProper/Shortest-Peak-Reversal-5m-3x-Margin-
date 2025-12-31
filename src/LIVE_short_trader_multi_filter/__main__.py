@@ -6,13 +6,13 @@ Usage:
     python -m short_trader_multi_filter
 """
 
-from .main_engine import run
+from .config import TraderConfig
+from .main_engine import MainEngine
 
 
 def main() -> None:
     """Execute the orchestrator."""
-
-    run()
+    MainEngine(config=TraderConfig()).run()
 
 
 if __name__ == "__main__":
