@@ -102,6 +102,23 @@ class LiveTradingEngine:
         )
         self.position = None
 
+    def _log_status(self, row: pd.Series):
+        nowstr = row.name.strftime("%Y-%m-%d %H:%M")
+        if self.position:
+            print(
+                f"{nowstr} | STATUS | pos=SHORT qty={self.position['qty']:.4f} "
+                f"entry={self.position['entry_price']:.6f} tp={self.position['tp_price']:.6f} "
+                f"liq={self.position.get('liq_price', float('nan')):.6f} "
+                f"last={float(row['Close']):.6f} equity={self.equity:.2f}"
+            )
+        else:
+            print(
+                f"{nowstr} | STATUS | flat | last={float(row['Close']):.6f} "
+                f"sma={float(row['sma']):.6f} k={float(row['k']):.3f} "
+                f"macd={float(row['macd']):.6f} signal={float(row['signal']):.6f} "
+                f"equity={self.equity:.2f}"
+            )
+
     def run(self):
         print("\n--- Live Short Trader (multi-filter) ---\n")
         while True:
@@ -110,6 +127,8 @@ class LiveTradingEngine:
                 self._maybe_exit(data)
                 if self._should_enter(data):
                     self._enter(data.iloc[-1])
+                # Always provide a heartbeat so paper trading has useful updates.
+                self._log_status(data.iloc[-1])
                 time.sleep(60 * self.config.agg_minutes)
             except KeyboardInterrupt:
                 print("Stopped by user.")
