@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 from bybit_official_git_repo_scripts.unified_trading import HTTP
 
@@ -19,6 +19,29 @@ class BybitLiveClient:
             recv_window=config.recv_window,
             log_requests=config.log_requests,
         )
+
+    def fetch_best_prices(self) -> Tuple[Optional[float], Optional[float], Optional[float]]:
+        """Return (lastPrice, bestBid, bestAsk) for the configured symbol/category."""
+
+        def _to_float(value: object) -> Optional[float]:
+            try:
+                return float(value) if value is not None else None
+            except (TypeError, ValueError):
+                return None
+
+        try:
+            resp = self.http.get_tickers(category=self.config.category, symbol=self.config.symbol)
+            tickers = resp.get("result", {}).get("list", [])
+            if not tickers:
+                return None, None, None
+            entry = tickers[0]
+            last_price = _to_float(entry.get("lastPrice"))
+            best_bid = _to_float(entry.get("bid1Price") or entry.get("bidPrice"))
+            best_ask = _to_float(entry.get("ask1Price") or entry.get("askPrice"))
+            return last_price, best_bid, best_ask
+        except Exception as exc:  # noqa: BLE001
+            print(f"Failed to fetch tickers: {exc}")
+            return None, None, None
 
     def fetch_equity(self) -> Optional[float]:
         """Return available equity for the settlement coin."""
@@ -56,13 +79,24 @@ class BybitLiveClient:
             print(f"Failed to fetch positions: {exc}")
             return None
 
-    def place_short_market(self, qty: float, tp_price: Optional[float] = None) -> Dict:
-        """Submit a live market sell (short) order with optional take profit."""
+    def place_short_limit(
+        self,
+        qty: float,
+        current_price: float,
+        best_ask: Optional[float] = None,
+        tp_price: Optional[float] = None,
+    ) -> Dict:
+        """Submit a limit sell using the current price (or best ask if lower)."""
+        limit_price = float(current_price)
+        if best_ask is not None and best_ask < limit_price:
+            limit_price = best_ask
+
         payload = {
             "category": self.config.category,
             "symbol": self.config.symbol,
             "side": "Sell",
-            "orderType": "Market",
+            "orderType": "Limit",
+            "price": f"{limit_price:.6f}",
             "qty": f"{qty}",
             "timeInForce": self.config.time_in_force,
         }
@@ -71,13 +105,14 @@ class BybitLiveClient:
             payload["tpTriggerBy"] = "LastPrice"
         return self.http.place_order(**payload)
 
-    def close_short_market(self, qty: float) -> Dict:
-        """Submit a reduce-only market buy to close the short position."""
+    def close_short_limit_current(self, qty: float, current_price: float) -> Dict:
+        """Submit a reduce-only limit buy at the current price to close the short."""
         payload = {
             "category": self.config.category,
             "symbol": self.config.symbol,
             "side": "Buy",
-            "orderType": "Market",
+            "orderType": "Limit",
+            "price": f"{float(current_price):.6f}",
             "qty": f"{qty}",
             "timeInForce": self.config.time_in_force,
             "reduceOnly": True,

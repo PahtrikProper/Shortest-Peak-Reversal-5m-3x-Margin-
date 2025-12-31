@@ -84,18 +84,26 @@ class LiveTradingEngine:
 
     def _enter(self, row: pd.Series):
         equity = self._refresh_equity()
+        last_price, _, best_ask = self.bybit.fetch_best_prices()
+        current_price = float(last_price) if last_price is not None else float(row["Close"])
+        if best_ask is not None and best_ask < current_price:
+            current_price = float(best_ask)
+            price_source = "best_ask"
+        else:
+            price_source = "last_price"
+
         risk_fraction = self.config.risk_fraction
         margin_rate = self.config.margin_rate
         position_value = (equity * risk_fraction) / margin_rate
-        qty = position_value / float(row["Close"])
+        qty = position_value / current_price
         if qty <= 0:
             print("Skipping entry: computed quantity <= 0")
             return
-        tp_price = float(row["Close"]) * (1 - 0.004)
+        tp_price = float(current_price) * (1 - 0.004)
         try:
-            response = self.bybit.place_short_market(qty=qty, tp_price=tp_price)
+            response = self.bybit.place_short_limit(qty=qty, current_price=current_price, best_ask=best_ask, tp_price=tp_price)
             result = response.get("result", {})
-            entry_price = float(result.get("avgPrice") or row["Close"])
+            entry_price = float(result.get("price") or result.get("avgPrice") or current_price)
             self.position = {
                 "entry_price": entry_price,
                 "tp_price": tp_price,
@@ -107,7 +115,9 @@ class LiveTradingEngine:
             }
             print(
                 f"ENTER SHORT LIVE @ {entry_price:.6f} qty={qty:.4f} TP={tp_price:.6f} "
-                f"orderId={self.position['orderId']} equity≈{equity:.2f}"
+                f"orderId={self.position['orderId']} equity≈{equity:.2f} "
+                f"current={current_price:.6f} last={float(last_price) if last_price is not None else float('nan'):.6f} "
+                f"source={price_source}"
             )
         except Exception as exc:  # noqa: BLE001
             print(f"Live entry failed: {exc}")
@@ -132,12 +142,14 @@ class LiveTradingEngine:
             exit_type = "momentum"
         if exit_price is None:
             return
+        last_price, _, _ = self.bybit.fetch_best_prices()
+        current_exit_price = float(last_price) if last_price is not None else float(exit_price)
         try:
-            response = self.bybit.close_short_market(qty=self.position["qty"])
+            response = self.bybit.close_short_limit_current(qty=self.position["qty"], current_price=current_exit_price)
             order_id = response.get("result", {}).get("orderId")
             print(
-                f"EXIT LIVE @ {exit_price:.6f} type={exit_type} qty={self.position['qty']:.4f} "
-                f"orderId={order_id}"
+                f"EXIT LIVE @ {current_exit_price:.6f} type={exit_type} qty={self.position['qty']:.4f} "
+                f"orderId={order_id} last={float(last_price) if last_price is not None else float('nan'):.6f}"
             )
             self._refresh_equity()
             self.position = None
