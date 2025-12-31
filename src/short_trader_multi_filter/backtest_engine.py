@@ -9,15 +9,19 @@ import pandas as pd
 from tqdm import tqdm
 
 from .config import TraderConfig
-from .order_utils import bybit_fee_fn, calc_liq_price_short, resolve_leverage, simulate_order_fill
+from .order_utils import PositionState
 
 
 @dataclass
 class StrategyParams:
-    highest_high_lookback: int
-    exit_type: str
-    risk_fraction: float
-    take_profit_pct: float
+    sma_period: int
+    stoch_period: int
+    macd_fast: int
+    macd_slow: int
+    macd_signal: int
+    use_macd: bool
+    use_signal: bool
+    use_momentum_exit: bool
 
 
 @dataclass
@@ -62,191 +66,139 @@ class BacktestEngine:
         self.config = config
         self._last_trades: List[Dict] = []
 
-    def _exit_target_for_row(self, row: pd.Series, exit_type: str) -> float:
-        if exit_type == "highest_low":
-            return float(row.get("highest_low", np.nan))
-        if exit_type == "lowest_high":
-            return float(row.get("lowest_high", np.nan))
-        if exit_type == "midpoint":
-            hi_low = row.get("highest_low", np.nan)
-            lo_high = row.get("lowest_high", np.nan)
-            if not np.isnan(hi_low) and not np.isnan(lo_high):
-                return float((hi_low + lo_high) / 2)
-        return float("nan")
+    def _run_backtest(self, df: pd.DataFrame, params: StrategyParams, capture_trades: bool = False) -> BacktestMetrics:
+        data = df.copy().sort_index()
+        data["sma"] = data["Close"].rolling(params.sma_period).mean()
 
-    def _run_backtest(self, df_1m: pd.DataFrame, params: StrategyParams, capture_trades: bool = False) -> BacktestMetrics:
-        data = df_1m.copy().sort_index()
-        data["prev_highest_high"] = data["High"].rolling(params.highest_high_lookback).max().shift(1)
-        data["highest_low"] = data["Low"].rolling(params.highest_high_lookback).max().shift(1)
-        data["lowest_high"] = data["High"].rolling(params.highest_high_lookback).min().shift(1)
+        lowest_low = data["Low"].rolling(params.stoch_period).min()
+        highest_high = data["High"].rolling(params.stoch_period).max()
+        raw_stoch = 100 * (data["Close"] - lowest_low) / (highest_high - lowest_low)
+        raw_stoch = raw_stoch.replace([np.inf, -np.inf], np.nan).fillna(0)
+        data["k"] = raw_stoch.rolling(self.config.smooth_k).mean() - 50
 
-        data["entry_signal"] = (data["High"] >= data["prev_highest_high"]) & (data["Close"] < data["Open"])
-        data["tradable"] = data["entry_signal"].notna()
+        data["ema_fast"] = data["Close"].ewm(span=params.macd_fast, adjust=False).mean()
+        data["ema_slow"] = data["Close"].ewm(span=params.macd_slow, adjust=False).mean()
+        data["macd"] = data["ema_fast"] - data["ema_slow"]
+        data["signal"] = data["macd"].ewm(span=params.macd_signal, adjust=False).mean()
 
         balance = self.config.starting_balance
         equity_curve: List[float] = []
-        position_open = False
-        entry_price = None
-        entry_time = None
-        liq_price = None
-        qty = 0.0
-        margin_used = 0.0
-        exit_target = None
-        entry_fill_status: str | None = None
+        position: PositionState | None = None
         wins = 0
         losses = 0
         win_sizes: List[float] = []
         loss_sizes: List[float] = []
         trades: List[Dict] = [] if capture_trades else []
-        min_tp_pct = getattr(self.config, "min_take_profit_pct", 0.0033)
 
-        warmup = params.highest_high_lookback + 1
+        warmup = max(params.sma_period, params.stoch_period, params.macd_slow, params.macd_signal) + 2
         for i in range(warmup, len(data)):
             row = data.iloc[i]
-            close = row["Close"]
-            fill_price: float | None = None
+            close = float(row["Close"])
 
-            if not position_open and balance > 0 and bool(row["entry_signal"] and row["tradable"]):
-                fill_price, fill_status = simulate_order_fill("short", close, self.config)
-                if fill_status != "filled" or fill_price is None:
+            year = row.name.year
+            month = row.name.month
+            in_date = (year > self.config.start_year) or (year == self.config.start_year and month >= self.config.start_month)
+
+            if position is None:
+                if not in_date:
                     equity_curve.append(balance)
                     continue
 
-                risk_fraction = min(max(params.risk_fraction, 0.0), self.config.max_risk_fraction)
-                if risk_fraction == 0:
-                    equity_curve.append(balance)
-                    continue
+                lows_ok = data["Low"].iloc[i - 2] <= data["Low"].iloc[i - 1] and data["Low"].iloc[i] < data["Low"].iloc[i - 1]
+                sma_ok = row["sma"] < data["sma"].iloc[i - 1]
+                macd_ok = (not params.use_macd) or (row["macd"] < data["macd"].iloc[i - 1])
+                signal_ok = (not params.use_signal) or (row["signal"] < data["signal"].iloc[i - 1])
 
-                margin_used = balance * risk_fraction
-                if margin_used < self.config.min_notional:
-                    equity_curve.append(balance)
-                    continue
+                if lows_ok and sma_ok and macd_ok and signal_ok and not np.isnan(row["sma"]):
+                    risk_fraction = self.config.risk_fraction
+                    margin_rate = self.config.margin_rate
+                    position_value = (balance * risk_fraction) / margin_rate
+                    qty = position_value / close
+                    margin_used = balance * risk_fraction
+                    if margin_used <= 0 or qty <= 0:
+                        equity_curve.append(balance)
+                        continue
 
-                leverage_used = resolve_leverage(margin_used, self.config.desired_leverage, self.config)
-                trade_value = margin_used * leverage_used
-                if trade_value < self.config.min_notional:
-                    equity_curve.append(balance)
-                    continue
-
-                entry_price = fill_price
-                qty = trade_value / entry_price
-                entry_fee = bybit_fee_fn(trade_value, self.config)
-                balance -= entry_fee + margin_used
-                liq_price = calc_liq_price_short(entry_price, int(leverage_used), self.config)
-                exit_target = self._exit_target_for_row(row, params.exit_type)
-                min_tp_price = entry_price * (1 - min_tp_pct)
-                if np.isnan(exit_target) and entry_price is not None:
-                    exit_target = entry_price * (1 - params.take_profit_pct)
-                if exit_target is None or np.isnan(exit_target) or exit_target > min_tp_price:
-                    exit_target = min_tp_price
-
-                entry_time = row.name
-                entry_fill_status = fill_status
-                position_open = True
-
-            if position_open and entry_price is not None and liq_price is not None:
-                margin_call = row["High"] >= liq_price
-                tp_hit = exit_target is not None and row["Low"] <= exit_target
-
-                if margin_call:
-                    net_pnl = -margin_used
-                    balance = max(0.0, balance)
-                    losses += 1
-                    loss_sizes.append((net_pnl / self.config.starting_balance) * 100)
-                    if capture_trades and entry_time is not None:
+                    balance -= margin_used
+                    tp_price = close * (1 - 0.004)
+                    position = PositionState(side="short", entry_price=close, tp_price=tp_price, qty=qty, entry_bar_time=row.name, margin_used=margin_used)
+                    if capture_trades:
                         trades.append(
                             {
-                                "entry_time": entry_time,
-                                "exit_time": row.name,
+                                "entry_time": row.name,
                                 "side": "SHORT",
-                                "entry_price": entry_price,
-                                "exit_price": liq_price,
-                                "pnl_value": net_pnl,
-                                "pnl_pct": (net_pnl / self.config.starting_balance) * 100,
+                                "entry_price": close,
                                 "qty": qty,
-                                "exit_type": "margin_call",
-                                "fill_status": entry_fill_status,
+                                "margin_used": margin_used,
                             }
                         )
-                    position_open = False
-                    entry_price = None
-                    entry_time = None
-                    liq_price = None
-                    exit_target = None
-                    qty = 0.0
-                    margin_used = 0.0
-                    entry_fill_status = None
-                elif tp_hit:
-                    exit_price = exit_target if tp_hit and exit_target is not None else close
-                    exit_fee = bybit_fee_fn(qty * exit_price, self.config)
-                    gross = (entry_price - exit_price) * qty
-                    net_pnl = gross - exit_fee
-                    balance += margin_used + net_pnl
-                    if net_pnl > 0:
+                    equity_curve.append(balance + margin_used)
+                    continue
+
+            else:
+                exit_price: float | None = None
+                tp_hit = row["Low"] <= (position.tp_price or 0)
+                mom_exit = params.use_momentum_exit and (row["k"] > data["k"].iloc[i - 1])
+
+                if tp_hit:
+                    exit_price = float(position.tp_price)
+                elif mom_exit:
+                    exit_price = close
+
+                if exit_price is not None:
+                    gross = (position.entry_price - exit_price) * position.qty  # short PnL
+                    balance += position.margin_used + gross
+                    pnl_pct = (gross / self.config.starting_balance) * 100
+                    if gross > 0:
                         wins += 1
-                        win_sizes.append((net_pnl / self.config.starting_balance) * 100)
+                        win_sizes.append(pnl_pct)
                     else:
                         losses += 1
-                        loss_sizes.append((net_pnl / self.config.starting_balance) * 100)
-
-                    if capture_trades and entry_time is not None:
+                        loss_sizes.append(pnl_pct)
+                    if capture_trades:
                         trades.append(
                             {
-                                "entry_time": entry_time,
+                                "entry_time": position.entry_bar_time,
                                 "exit_time": row.name,
                                 "side": "SHORT",
-                                "entry_price": entry_price,
+                                "entry_price": position.entry_price,
                                 "exit_price": exit_price,
-                                "pnl_value": net_pnl,
-                                "pnl_pct": (net_pnl / self.config.starting_balance) * 100,
-                                "qty": qty,
-                                "exit_type": params.exit_type,
-                                "fill_status": entry_fill_status,
+                                "pnl_value": gross,
+                                "pnl_pct": pnl_pct,
+                                "qty": position.qty,
+                                "exit_type": "tp" if tp_hit else "momentum",
                             }
                         )
-                    position_open = False
-                    entry_price = None
-                    entry_time = None
-                    liq_price = None
-                    exit_target = None
-                    qty = 0.0
-                    margin_used = 0.0
-                    entry_fill_status = None
+                    position = None
 
-            if position_open and entry_price is not None:
-                unrealized_pnl = (entry_price - close) * qty
-                equity = balance + margin_used + unrealized_pnl
+            equity_curve.append(balance + (position.margin_used if position else 0))
+
+        if position is not None:
+            final_close = float(data.iloc[-1]["Close"])
+            gross = (position.entry_price - final_close) * position.qty
+            balance += position.margin_used + gross
+            pnl_pct = (gross / self.config.starting_balance) * 100
+            if gross > 0:
+                wins += 1
+                win_sizes.append(pnl_pct)
             else:
-                equity = balance
-            equity_curve.append(max(equity, 0))
-
-        # If the dataset ends without hitting the minimum TP or triggering a margin call, count it as a loss.
-        if position_open and entry_price is not None and entry_time is not None:
-            final_close = data.iloc[-1]["Close"]
-            exit_fee = bybit_fee_fn(qty * final_close, self.config)
-            gross = (entry_price - final_close) * qty
-            net_pnl = gross - exit_fee
-            if net_pnl >= 0:
-                net_pnl = -abs(exit_fee)
-            balance += margin_used + net_pnl
-            losses += 1
-            loss_sizes.append((net_pnl / self.config.starting_balance) * 100)
+                losses += 1
+                loss_sizes.append(pnl_pct)
             if capture_trades:
                 trades.append(
                     {
-                        "entry_time": entry_time,
+                        "entry_time": position.entry_bar_time,
                         "exit_time": data.index[-1],
                         "side": "SHORT",
-                        "entry_price": entry_price,
+                        "entry_price": position.entry_price,
                         "exit_price": final_close,
-                        "pnl_value": net_pnl,
-                        "pnl_pct": (net_pnl / self.config.starting_balance) * 100,
-                        "qty": qty,
-                        "exit_type": "min_tp_not_hit",
-                        "fill_status": entry_fill_status,
+                        "pnl_value": gross,
+                        "pnl_pct": pnl_pct,
+                        "qty": position.qty,
+                        "exit_type": "eod",
                     }
                 )
-            equity_curve.append(max(balance, 0))
+            equity_curve.append(balance)
 
         if not equity_curve:
             return BacktestMetrics(0, 0, self.config.starting_balance, 0, 0, 0, None, 0, 0, 0, 0)
