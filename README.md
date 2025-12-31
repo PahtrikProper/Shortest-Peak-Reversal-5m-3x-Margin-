@@ -5,18 +5,22 @@ This repository publishes a single active strategy: **short_trader_multi_filter*
 ## Repository layout
 - `src/short_trader_multi_filter/` – interactive strategy package (prompts for USDT pair, runs backtests, stores artifacts under `data/multi_filter/`).
 - `src/LIVE_short_trader_multi_filter/` – **live Bybit futures** variant that reuses the optimizer, syncs equity/positions via the official Bybit HTTP client (see `bybit_official_git_repo_scripts/`), and submits live short orders.
-- `archived_strategies/` – legacy/retired strategy folders.
-- `data/` – runtime artifacts produced at execution (per-symbol under `data/multi_filter/`).
-- `notes/` – strategy notes.
+- `bybit_official_git_repo_scripts/` – upstream Bybit client and examples used for live trading (HTTP, websocket, position, account helpers, etc.).
+- `archived_strategies/` – legacy/retired strategy folders (currently empty).
+- `data/` – runtime artifacts produced at execution (per-symbol under `data/multi_filter/`; defaults include `best_params.json`, `optimization_queue.json`).
+- `notes/` – strategy notes and quickstart references.
 - `tests/` – placeholder.
 
 ```
 .
-├── src/short_trader_multi_filter/   # Interactive strategy package (backtest + optimizer)
-├── archived_strategies/             # Legacy/retired strategies
-├── data/                            # JSON artifacts produced at runtime (per-symbol under data/multi_filter/)
-├── notes/                           # Strategy notes
-└── tests/                           # (empty placeholder)
+├── src/
+│   ├── short_trader_multi_filter/        # Interactive strategy package (backtest + optimizer)
+│   └── LIVE_short_trader_multi_filter/   # Live Bybit futures executor (uses official client)
+├── bybit_official_git_repo_scripts/      # Official Bybit HTTP/WebSocket client & examples
+├── archived_strategies/                  # Legacy/retired strategies (empty)
+├── data/                                 # JSON artifacts produced at runtime (per-symbol under data/multi_filter/)
+├── notes/                                # Strategy notes and quickstarts
+└── tests/                                # (empty placeholder)
 ```
 
 ## Entry points
@@ -48,15 +52,6 @@ Set `testnet=True` in `TraderConfig` if you want to validate flows on Bybit test
 ### Data and artifacts
 - Backtests fetch Bybit REST klines from `/v5/market/kline` (linear category) for the configured window/interval.
 - Optimizer and live artifacts are saved under `data/multi_filter/` (e.g., `best_params.json`).
-
-To run the live Bybit futures executor with your saved parameters and API keys (unified account, linear category):
-
-```bash
-export BYBIT_API_KEY=your_key
-export BYBIT_API_SECRET=your_secret
-PYTHONPATH=src python -m LIVE_short_trader_multi_filter
-```
-Set `testnet=True` in `TraderConfig` if you want to validate flows on Bybit testnet first. The live loop uses the official client in `bybit_official_git_repo_scripts` for wallet/position reads and order submission.
 
 ## Behavior overview
 - Filters: SMA on close, centered Stoch %K (smoothed), optional MACD and Signal. Date filter blocks entries before the configured start year/month.
