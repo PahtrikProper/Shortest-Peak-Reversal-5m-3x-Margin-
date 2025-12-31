@@ -122,16 +122,6 @@ class BacktestEngine:
                     balance -= margin_used
                     tp_price = close * (1 - 0.004)
                     position = PositionState(side="short", entry_price=close, tp_price=tp_price, qty=qty, entry_bar_time=row.name, margin_used=margin_used)
-                    if capture_trades:
-                        trades.append(
-                            {
-                                "entry_time": row.name,
-                                "side": "SHORT",
-                                "entry_price": close,
-                                "qty": qty,
-                                "margin_used": margin_used,
-                            }
-                        )
                     equity_curve.append(balance + margin_used)
                     continue
 
