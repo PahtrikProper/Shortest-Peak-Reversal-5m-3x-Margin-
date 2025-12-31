@@ -20,7 +20,7 @@ class TraderConfig:
     order_reject_prob: float = 0.0
     max_fill_latency: float = 0.0
     risk_fraction: float = 0.95  # 95% equity
-    margin_rate: float = 0.19  # short margin requirement
+    margin_rate: float = 0.10  # ~10x notional when risking 95% equity
     log_blocked_trades: bool = True
     start_year: int = 2020
     start_month: int = 1
