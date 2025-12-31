@@ -1,55 +1,40 @@
-# Shortest Peak Reversal – 5m, 3x Margin
+# Short Trader Multi Filter – 3m, ~10x, 95% Funds (interactive)
 
-A short-biased peak-reversal strategy that backtests a highest-high breakdown on 5m candles, saves the best parameters, and (optionally) runs a live trading loop. This repository contains a single strategy package plus its supporting data and notes.
+This repository publishes a single active strategy: **short_trader_multi_filter**. All other legacy strategies have been moved under `archived_strategies/`. The active strategy backtests a short-only, multi-filter setup (centered Stoch, SMA, optional MACD/Signal) on 3m candles over ~3 hours of history, locks a 0.4% take-profit, and (optionally) runs a live loop for a USDT pair you choose at startup.
 
 ## Repository layout
-- `src/short_trade_margin_call/` – the strategy package (backtests, optimizer, live/paper trade entry points).
-- `data/` – runtime artifacts shared by the engines (`best_params.json`, `optimization_queue.json`).
-- `notes/` – research notes for the workflow (`notes/strategy_overview.md`).
-- `tests/` – placeholder for future automated tests.
-- `Shortest-Peak-Reversal-5m-3x-Margin-.zip` – original bundle of the extracted files.
+- `src/short_trader_multi_filter/` – interactive strategy package (prompts for USDT pair, runs backtests, stores artifacts under `data/multi_filter/`).
+- `archived_strategies/` – legacy/retired strategy folders.
+- `data/` – runtime artifacts produced at execution (per-symbol under `data/multi_filter/`).
+- `notes/` – strategy notes.
+- `tests/` – placeholder.
 
 ```
 .
-├── src/short_trade_margin_call/    # Strategy package (backtest + optimizer + live runner)
-├── data/                           # JSON artifacts produced at runtime
-├── notes/                          # Strategy notes
-└── tests/                          # (empty placeholder)
+├── src/short_trader_multi_filter/   # Interactive strategy package (backtest + optimizer)
+├── archived_strategies/             # Legacy/retired strategies
+├── data/                            # JSON artifacts produced at runtime (per-symbol under data/multi_filter/)
+├── notes/                           # Strategy notes
+└── tests/                           # (empty placeholder)
 ```
 
-## Entry points
-Set `PYTHONPATH=src` from the repository root, then run one of the following:
+## Entry point
+Set `PYTHONPATH=src` from the repository root, then run:
 
-- Orchestrated optimize → live loop:
-  ```bash
-  PYTHONPATH=src python -m short_trade_margin_call
-  # equivalent:
-  PYTHONPATH=src python -m short_trade_margin_call.start
-  ```
-- Backtest/optimization only:
-  ```bash
-  PYTHONPATH=src python -m short_trade_margin_call.backtest_engine
-  ```
-- Live trading using previously saved params:
-  ```bash
-  PYTHONPATH=src python -m short_trade_margin_call.live
-  ```
+```bash
+PYTHONPATH=src python -m short_trader_multi_filter
+```
+You will be prompted for a USDT pair (e.g., BTCUSDT). The app backtests ~3 hours of 3m futures data, selects the best parameters from the configured grid, and saves artifacts under `data/multi_filter/`.
 
 ## Behavior overview
-- `BacktestEngine` sweeps `highest_high_lookback` and exit-type candidates to find the best-performing parameters.
-- `MainEngine` coordinates optimization, persists `data/best_params.json`, and enqueues new runs in `data/optimization_queue.json`.
-- `LiveTradingEngine` streams Bybit klines, applies the short breakout logic, and manages exits/margin calls.
-- Backtests simulate the same microstructure as paper/live trading: spread + slippage on fills, random rejects, fee debits, leverage clamping, liquidation checks, and structured exits.
-- `paths.py` centralizes repository and `data/` paths so artifacts land in a single shared folder.
-
-## Getting started
-1. Create a Python virtual environment (e.g., `python -m venv .venv`) and activate it.
-2. Install dependencies when they are defined (for example, via `pip install -r requirements.txt`).
-3. Update `TraderConfig` in `src/short_trade_margin_call/config.py` for your symbol, leverage, and slippage/spread assumptions.
-4. Run the orchestrated entry point (`python -m short_trade_margin_call`) to optimize then start the trading loop, or run the specific modules listed above as needed.
+- Filters: SMA on close, centered Stoch %K (smoothed), optional MACD and Signal. Date filter blocks entries before the configured start year/month.
+- Entry (short only, one position at a time):
+  - in-date, low[t-2] ≤ low[t-1] and low[t] < low[t-1]; SMA[t] < SMA[t-1]; MACD/Signal filters if enabled; flat position.
+  - Size: 95% of equity with 10% margin requirement (≈9.5–10x notional), commission/slippage off.
+- Exits: TP at 0.4% (priority), optional momentum exit when Stoch K rises; one full exit, no pyramiding.
+- Live loop: runs immediately after backtest, fetches 3m bars, applies the same filters, checks a paper margin-call threshold, and logs a status heartbeat each bar (position, TP, LIQ, equity).
+- Backtests use ~3 hours of 3m Bybit futures data; optimizer grid is defined in `config.py`.
 
 ## Notes
-- Outputs land in `data/best_params.json` and `data/optimization_queue.json`; the folder is created automatically if missing.
+- Outputs land in `data/multi_filter/best_params.json` and related artifacts; the folder is created automatically.
 - The strategy is experimental—paper trade first and understand the risks of leveraged trading.
-
-For a conceptual overview of the workflow, see `notes/strategy_overview.md`.
