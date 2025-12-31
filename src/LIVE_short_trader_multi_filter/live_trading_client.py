@@ -99,6 +99,8 @@ class BybitLiveClient:
             "price": f"{limit_price:.6f}",
             "qty": f"{qty}",
             "timeInForce": self.config.time_in_force,
+            "marginMode": self.config.margin_mode,
+            "positionIdx": self.config.position_idx,
         }
         if tp_price is not None:
             payload["takeProfit"] = f"{tp_price:.6f}"
@@ -116,5 +118,7 @@ class BybitLiveClient:
             "qty": f"{qty}",
             "timeInForce": self.config.time_in_force,
             "reduceOnly": True,
+            "marginMode": self.config.margin_mode,
+            "positionIdx": self.config.position_idx,
         }
         return self.http.place_order(**payload)

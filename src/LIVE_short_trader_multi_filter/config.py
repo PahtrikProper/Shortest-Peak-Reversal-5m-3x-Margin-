@@ -22,6 +22,8 @@ class TraderConfig:
     recv_window: int = 5000
     log_requests: bool = False
     agg_minutes: int = DEFAULT_AGG_MINUTES
+    margin_mode: str = "ISOLATED_MARGIN"
+    position_idx: int = 1  # one-way mode short
     spread_bps: int = 0
     slippage_bps: int = 0
     order_reject_prob: float = 0.0
@@ -64,5 +66,6 @@ class TraderConfig:
             f"Fees: {self.bybit_fee * 100:.2f}% | Spread: {self.spread_bps} bps | Slippage: {self.slippage_bps} bps\n"
             f"Risk per entry: {self.risk_fraction * 100:.1f}% equity | Margin rate: {self.margin_rate * 100:.1f}% | Start date: {self.start_year}-{self.start_month:02d}\n"
             f"TIF: {self.time_in_force} | Desired leverage: {self.desired_leverage}x | Settlement: {self.settlement_coin}\n"
+            f"Margin mode: {self.margin_mode} | PositionIdx: {self.position_idx}\n"
             "Strategy: Short-only, date-filtered, SMA + centered Stoch + optional MACD/Signal filters, fixed 0.4% TP, optional momentum exit."
         )
