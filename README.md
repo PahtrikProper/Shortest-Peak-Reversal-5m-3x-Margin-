@@ -59,7 +59,10 @@ Set `testnet=True` in `TraderConfig` if you want to validate flows on Bybit test
   - in-date, low[t-2] ≤ low[t-1] and low[t] < low[t-1]; SMA[t] < SMA[t-1]; MACD/Signal filters if enabled; flat position.
   - Size: 95% of equity with 10% margin requirement (≈9.5–10x notional), commission/slippage off.
 - Exits: TP at 0.4% (priority), optional momentum exit when Stoch K rises; one full exit, no pyramiding.
-- Live loop: runs immediately after backtest, fetches 3m bars, applies the same filters, and submits/monitors **live Bybit futures short orders** (market with TP, reduce-only market close). Equity/position snapshots are pulled from Bybit each bar to keep state in sync.
+- Live loop: runs immediately after backtest, fetches 3m bars, applies the same filters, and submits/monitors **live Bybit futures short orders**:
+  - **Sell**: limit at the current last price, using best ask only if it is lower; TP attached.
+  - **Buy to close**: reduce-only limit at the current last price (no bid override).
+  - Orders include `marginMode=ISOLATED_MARGIN` and `positionIdx=1` (one-way short). Equity/position snapshots are pulled from Bybit each bar to keep state in sync.
 - Backtests use ~3 hours of 3m Bybit futures data; optimizer grid is defined in `config.py`.
 
 ## Notes
