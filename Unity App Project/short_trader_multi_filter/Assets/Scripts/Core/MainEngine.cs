@@ -25,9 +25,24 @@ namespace UnityApp.ShortTraderMultiFilter
         public void Run()
         {
             LogConfig();
-            var (bestRow, metrics, summary) = RunBacktests();
+            var (bestRow, metrics, summary) = RunOptimizer();
+            var parameters = CreateParameters(bestRow);
 
-            var parameters = new StrategyParams(
+            SaveBestParams(bestRow, summary);
+            PrintTrades(metrics);
+
+            var live = new LiveTradingEngine(_config, parameters, summary);
+            live.Run();
+        }
+
+        public (Dictionary<string, object> BestRow, BacktestMetrics Metrics, Dictionary<string, double> Results) RunOptimizer()
+        {
+            return RunBacktests();
+        }
+
+        public StrategyParams CreateParameters(Dictionary<string, object> bestRow)
+        {
+            return new StrategyParams(
                 Convert.ToInt32(bestRow["sma_period"]),
                 Convert.ToInt32(bestRow["stoch_period"]),
                 _config.MacdFast,
@@ -36,12 +51,6 @@ namespace UnityApp.ShortTraderMultiFilter
                 Convert.ToBoolean(bestRow["use_macd"]),
                 Convert.ToBoolean(bestRow["use_signal"]),
                 Convert.ToBoolean(bestRow["use_momentum_exit"]));
-
-            SaveBestParams(bestRow, summary);
-            PrintTrades(metrics);
-
-            var live = new LiveTradingEngine(_config, parameters, summary);
-            live.Run();
         }
 
         private void LogConfig()
@@ -91,15 +100,7 @@ namespace UnityApp.ShortTraderMultiFilter
 
             var metrics = _backtestEngine.RunBacktest(
                 data,
-                new StrategyParams(
-                    Convert.ToInt32(best["sma_period"]),
-                    Convert.ToInt32(best["stoch_period"]),
-                    _config.MacdFast,
-                    _config.MacdSlow,
-                    _config.MacdSignal,
-                    Convert.ToBoolean(best["use_macd"]),
-                    Convert.ToBoolean(best["use_signal"]),
-                    Convert.ToBoolean(best["use_momentum_exit"])),
+                CreateParameters(best),
                 captureTrades: true);
 
             return (best, metrics, results);

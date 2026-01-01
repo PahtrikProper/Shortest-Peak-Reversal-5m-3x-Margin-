@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace UnityApp.ShortTraderMultiFilter
 {
@@ -17,6 +18,12 @@ namespace UnityApp.ShortTraderMultiFilter
         private PositionState? _position;
         private double _equity;
 
+        public event Action<TradeAlert>? OnEntry;
+        public event Action<TradeAlert>? OnExit;
+        public event Action<string>? OnStatus;
+        public event Action<Exception>? OnError;
+        public event Action<double>? OnEquity;
+
         public LiveTradingEngine(TraderConfig config, StrategyParams parameters, Dictionary<string, double> results)
         {
             _config = config;
@@ -26,12 +33,15 @@ namespace UnityApp.ShortTraderMultiFilter
             _equity = config.StartingBalance;
         }
 
-        public void Run(CancellationToken? cancellation = null)
+        public async Task RunAsync(CancellationToken? cancellation = null, TimeSpan? loopDelayOverride = null)
         {
             Console.WriteLine("\n--- Live Short Trader (multi-filter) ---\n");
             Console.WriteLine($"Last optimizer summary: {string.Join(", ", _results.Select(kv => $"{kv.Key}={kv.Value}"))}");
 
-            while (cancellation?.IsCancellationRequested != true)
+            var tickDelay = loopDelayOverride ?? TimeSpan.FromMinutes(_config.AggregationMinutes);
+            var token = cancellation ?? CancellationToken.None;
+
+            while (!token.IsCancellationRequested)
             {
                 try
                 {
@@ -42,7 +52,7 @@ namespace UnityApp.ShortTraderMultiFilter
                         Enter(data.Last());
                     }
                     LogStatus(data.Last());
-                    Thread.Sleep(TimeSpan.FromMinutes(_config.AggregationMinutes));
+                    await Task.Delay(tickDelay, token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -51,9 +61,15 @@ namespace UnityApp.ShortTraderMultiFilter
                 catch (Exception ex)
                 {
                     Console.WriteLine($"Exception in live loop: {ex}");
-                    Thread.Sleep(TimeSpan.FromSeconds(2));
+                    OnError?.Invoke(ex);
+                    await Task.Delay(TimeSpan.FromSeconds(2), token).ConfigureAwait(false);
                 }
             }
+        }
+
+        public void Run(CancellationToken? cancellation = null, TimeSpan? loopDelayOverride = null)
+        {
+            RunAsync(cancellation, loopDelayOverride).GetAwaiter().GetResult();
         }
 
         private List<Candle> PrepareDataFrame()
@@ -107,6 +123,8 @@ namespace UnityApp.ShortTraderMultiFilter
             };
 
             Console.WriteLine($"ENTER SHORT @ {candle.Close:F6} qty={qty:F4} TP={tp:F6} LIQ={liqPrice:F6} Equity={_equity:F2}");
+            OnEquity?.Invoke(_equity);
+            OnEntry?.Invoke(new TradeAlert("entry", candle.Timestamp, candle.Close, _equity, _position));
         }
 
         private void MaybeExit(IReadOnlyList<Candle> data)
@@ -142,6 +160,8 @@ namespace UnityApp.ShortTraderMultiFilter
             var gross = (_position.EntryPrice - exitPrice.Value) * _position.Quantity;
             _equity += _position.MarginUsed + gross;
             Console.WriteLine($"EXIT @ {exitPrice.Value:F6} type={exitType} pnl={gross:F4} equity={_equity:F2}");
+            OnEquity?.Invoke(_equity);
+            OnExit?.Invoke(new TradeAlert(exitType, last.Timestamp, exitPrice.Value, _equity, _position));
             _position = null;
         }
 
@@ -156,6 +176,32 @@ namespace UnityApp.ShortTraderMultiFilter
             {
                 Console.WriteLine($"{now} | STATUS | flat | last={candle.Close:F6} equity={_equity:F2}");
             }
+
+            OnStatus?.Invoke($"{now} | equity={_equity:F2} last={candle.Close:F6}");
+            OnEquity?.Invoke(_equity);
+        }
+    }
+
+    public class TradeAlert
+    {
+        public TradeAlert(string type, DateTime timestamp, double price, double equity, PositionState? position)
+        {
+            Type = type;
+            Timestamp = timestamp;
+            Price = price;
+            Equity = equity;
+            Position = position;
+        }
+
+        public string Type { get; }
+        public DateTime Timestamp { get; }
+        public double Price { get; }
+        public double Equity { get; }
+        public PositionState? Position { get; }
+
+        public override string ToString()
+        {
+            return $"{Timestamp:u} | {Type.ToUpperInvariant()} @ {Price:F6} | equity={Equity:F2}";
         }
     }
 }

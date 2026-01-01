@@ -1,5 +1,8 @@
 using System;
 using System.IO;
+#if UNITY_2021_1_OR_NEWER
+using UnityEngine;
+#endif
 
 namespace UnityApp.ShortTraderMultiFilter
 {
@@ -13,8 +16,11 @@ namespace UnityApp.ShortTraderMultiFilter
 
         static Paths()
         {
-            var current = Directory.GetCurrentDirectory();
-            RepositoryRoot = current;
+#if UNITY_2021_1_OR_NEWER
+            RepositoryRoot = Application.persistentDataPath ?? Directory.GetCurrentDirectory();
+#else
+            RepositoryRoot = Directory.GetCurrentDirectory();
+#endif
 
             DataDirectory = Path.Combine(RepositoryRoot, "data", "multi_filter");
             Directory.CreateDirectory(DataDirectory);
