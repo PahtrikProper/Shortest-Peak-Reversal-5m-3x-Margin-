@@ -85,12 +85,19 @@ class LiveTradingEngine:
     def _enter(self, row: pd.Series):
         equity = self._refresh_equity()
         last_price, _, best_ask = self.bybit.fetch_best_prices()
-        current_price = float(last_price) if last_price is not None else float(row["Close"])
+        base_price = float(row["Close"])
+        if last_price is not None:
+            current_price = float(last_price)
+            price_source = "last_price"
+        else:
+            current_price = base_price
+            price_source = "close_fallback"
         if best_ask is not None and best_ask < current_price:
             current_price = float(best_ask)
             price_source = "best_ask"
-        else:
-            price_source = "last_price"
+        if current_price <= 0:
+            print("Skipping entry: invalid current price")
+            return
 
         risk_fraction = self.config.risk_fraction
         margin_rate = self.config.margin_rate
@@ -142,14 +149,33 @@ class LiveTradingEngine:
             exit_type = "momentum"
         if exit_price is None:
             return
+        # Refresh live position size to avoid stale qty on close
+        qty_to_close = self.position["qty"]
+        live_pos = self.bybit.get_position()
+        if live_pos:
+            try:
+                live_qty = float(live_pos.get("size", 0) or 0)
+                if live_qty > 0:
+                    qty_to_close = live_qty
+                    self.position["qty"] = live_qty
+            except Exception as exc:  # noqa: BLE001
+                print(f"Unable to refresh live position size: {exc}")
         last_price, _, _ = self.bybit.fetch_best_prices()
-        current_exit_price = float(last_price) if last_price is not None else float(exit_price)
+        if last_price is not None:
+            current_exit_price = float(last_price)
+            exit_source = "last_price"
+        else:
+            current_exit_price = float(exit_price)
+            exit_source = "exit_rule_price"
+        if current_exit_price <= 0:
+            print("Skipping exit: invalid current price")
+            return
         try:
-            response = self.bybit.close_short_limit_current(qty=self.position["qty"], current_price=current_exit_price)
+            response = self.bybit.close_short_limit_current(qty=qty_to_close, current_price=current_exit_price)
             order_id = response.get("result", {}).get("orderId")
             print(
-                f"EXIT LIVE @ {current_exit_price:.6f} type={exit_type} qty={self.position['qty']:.4f} "
-                f"orderId={order_id} last={float(last_price) if last_price is not None else float('nan'):.6f}"
+                f"EXIT LIVE @ {current_exit_price:.6f} type={exit_type} qty={qty_to_close:.4f} "
+                f"orderId={order_id} last={float(last_price) if last_price is not None else float('nan'):.6f} source={exit_source}"
             )
             self._refresh_equity()
             self.position = None
