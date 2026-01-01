@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from typing import Sequence
 
 DEFAULT_AGG_MINUTES = 3
+DEFAULT_API_KEY = os.getenv("BYBIT_API_KEY", "")
+DEFAULT_API_SECRET = os.getenv("BYBIT_API_SECRET", "")
 
 
 @dataclass
@@ -14,8 +17,9 @@ class TraderConfig:
     contract_type: str = "LinearPerpetual"
     starting_balance: float = 1000.0
     bybit_fee: float = 0.0  # commission = 0
-    api_key: str = ""
-    api_secret: str = ""
+    # Set your Bybit API credentials here (env vars override if present).
+    api_key: str = DEFAULT_API_KEY
+    api_secret: str = DEFAULT_API_SECRET
     testnet: bool = False
     account_type: str = "UNIFIED"
     settlement_coin: str = "USDT"

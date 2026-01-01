@@ -43,6 +43,7 @@ Set `testnet=True` in `TraderConfig` if you want to validate flows on Bybit test
 ### Runtime configuration (key fields in `TraderConfig`)
 - `symbol` / `category`: defaults to `BTCUSDT` / `linear`.
 - `api_key` / `api_secret` / `testnet`: injected from env or edited in `config.py`. Use a Unified account key.
+- To hardcode credentials, set `api_key` and `api_secret` directly in `src/LIVE_short_trader_multi_filter/config.py` (env vars `BYBIT_API_KEY`/`BYBIT_API_SECRET` take precedence).
 - `settlement_coin`: `USDT` by default.
 - `time_in_force`: `IOC` by default for market orders with TP.
 - `desired_leverage`: target leverage when sizing shorts (equity pull each bar keeps sizing honest).
